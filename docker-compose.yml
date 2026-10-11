@@ -1,0 +1,55 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: manga_db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./backend_manga/perpustakaan.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 40
+      start_period: 120s
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: manga_pma
+    environment:
+      PMA_HOST: db
+    ports:
+      - "8082:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: ./backend_manga
+    container_name: manga_api
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    
+  web:
+    build: ./project_manga
+    container_name: manga_web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+
+volumes:
+  mysql_data:
