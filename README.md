@@ -626,16 +626,13 @@ Frontend lokal menggunakan base URL API yang didefinisikan di kode Flutter. Pera
 
 ### 12.1 Root `.env`
 
-Buat file `.env` di direktori yang sama dengan `docker-compose.yml`:
+Salin `.env.example` menjadi `.env` di direktori yang sama dengan `docker-compose.yml`, lalu ganti password contoh untuk penggunaan lokal:
 
-```env
-MYSQL_ROOT_PASSWORD=isi_password_root_lokal
-DB_NAME=perpustakaan
-DB_USER=mangatsu
-DB_PASSWORD=isi_password_database_lokal
+```powershell
+Copy-Item .env.example .env
 ```
 
-Compose meneruskan nilai tersebut ke container MySQL dan API. Gunakan password lokal yang kuat. Jangan menaruh password produksi di README, source code, atau repository.
+Compose meneruskan nilai tersebut ke container MySQL dan API. `.env.example` boleh di-commit karena hanya berisi contoh; `.env` lokal tetap diabaikan oleh Git. Jangan menaruh password produksi di README, source code, atau repository.
 
 ### 12.2 Backend Variables
 
