@@ -95,10 +95,6 @@ mixin HomeHero on _HomeStateBase {
 
   Widget _heroInfo(Manga manga) {
     final genres = manga.genre.take(3).toList();
-    final hasChapter =
-        manga.chapter.trim().isNotEmpty && manga.chapter.toLowerCase() != 'n/a';
-    final chapterLabel =
-        hasChapter ? 'Mulai Baca Ch. ${manga.chapter}' : 'Mulai Baca';
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,20 +124,21 @@ mixin HomeHero on _HomeStateBase {
           spacing: 6,
           children: [
             ...genres.map((genre) => _genreBadge(genre)),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.star, color: Colors.amber, size: 17),
-                const SizedBox(width: 3),
-                Text(
-                  manga.rating.toStringAsFixed(1),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+            if (manga.rating > 0)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.star, color: Colors.amber, size: 17),
+                  const SizedBox(width: 3),
+                  Text(
+                    manga.rating.toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
         const SizedBox(height: 10),
@@ -157,7 +154,7 @@ mixin HomeHero on _HomeStateBase {
         ElevatedButton.icon(
           onPressed: () => _openMangaDetail(manga),
           icon: const Icon(Icons.play_arrow_rounded),
-          label: Text(chapterLabel),
+          label: const Text('Baca manga'),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xff9a5bea),
             foregroundColor: Colors.white,

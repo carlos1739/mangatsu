@@ -3,6 +3,8 @@ import 'package:project_manga/models/manga.dart';
 import 'package:project_manga/services/api_service.dart';
 import 'package:project_manga/widgets/anime_card.dart';
 import 'package:project_manga/services/appearance_controller.dart';
+import 'package:project_manga/screens/catalog/chapter_reader.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class MangaDetail extends StatefulWidget {
   final Manga manga;
@@ -30,7 +32,13 @@ class _MangaDetailState extends State<MangaDetail> {
   int _visibleComments = 3;
   int get _appearance => appearanceController.value;
   Manga? _loadedManga;
-  List<int> _visibleChapters = const [];
+  List<MangaChapter> _chapters = const [];
+  List<MangaChapter> _visibleChapters = const [];
+  bool _chaptersLoading = true;
+  bool _loadingMoreChapters = false;
+  bool _hasMoreChapters = false;
+  int _chaptersPage = 1;
+  String? _chaptersError;
 
   Manga get _currentManga => _loadedManga ?? widget.manga;
   bool get _isDark => _appearance == 1;
@@ -57,6 +65,7 @@ class _MangaDetailState extends State<MangaDetail> {
     _rebuildChapters();
     _checkBookmark();
     _loadMangaDetail();
+    _loadMangaChapters();
     _chapterSearch.addListener(_onChapterSearchChanged);
   }
 
@@ -136,7 +145,55 @@ class _MangaDetailState extends State<MangaDetail> {
   }
   // [AKHIR]
 
-  int get _chapterCount => int.tryParse(_currentManga.chapter) ?? 0;
+  Future<void> _loadMangaChapters() async {
+    setState(() {
+      _chaptersLoading = true;
+      _chaptersError = null;
+    });
+    try {
+      final result = await ApiService.getMangaChapters(
+        widget.manga.id,
+        page: _chaptersPage,
+      );
+      if (!mounted) return;
+      setState(() {
+        _chapters = result.chapters;
+        _chaptersPage = result.page;
+        _hasMoreChapters = result.page * 100 < result.total;
+        _chaptersLoading = false;
+        _rebuildChapters();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _chaptersError = error.toString();
+        _chaptersLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreChapters() async {
+    if (_loadingMoreChapters || !_hasMoreChapters) return;
+    setState(() => _loadingMoreChapters = true);
+    try {
+      final result = await ApiService.getMangaChapters(
+        widget.manga.id,
+        page: _chaptersPage + 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _chapters = [..._chapters, ...result.chapters];
+        _chaptersPage = result.page;
+        _hasMoreChapters = result.page * 100 < result.total;
+        _loadingMoreChapters = false;
+        _rebuildChapters();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingMoreChapters = false);
+      _showMessage('Gagal memuat chapter berikutnya: $error');
+    }
+  }
 
   void _onChapterSearchChanged() {
     if (!mounted) return;
@@ -148,18 +205,90 @@ class _MangaDetailState extends State<MangaDetail> {
       RegExp(r'^chapter\s*'),
       '',
     );
-    final chapters = List<int>.generate(_chapterCount, (index) => index + 1);
+    final chapters = List<MangaChapter>.of(_chapters);
     final filtered =
         query.isEmpty
             ? chapters
             : chapters
-                .where((chapter) => chapter.toString().contains(query))
+                .where(
+                  (chapter) =>
+                      chapter.chapter.toLowerCase().contains(query) ||
+                      chapter.title.toLowerCase().contains(query),
+                )
                 .toList();
-    _visibleChapters = _sortNewest ? filtered.reversed.toList() : filtered;
+    filtered.sort((a, b) {
+      final aNumber = double.tryParse(a.chapter);
+      final bNumber = double.tryParse(b.chapter);
+      final comparison =
+          aNumber != null && bNumber != null
+              ? aNumber.compareTo(bNumber)
+              : a.chapter.compareTo(b.chapter);
+      return _sortNewest ? -comparison : comparison;
+    });
+    _visibleChapters = filtered;
   }
 
   void _cycleAppearance() {
     appearanceController.cycle();
+  }
+
+  Future<void> _openMangaSource() async {
+    final manga = _currentManga;
+    final uri = Uri.tryParse(manga.mangaDexUrl ?? '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host != 'mangadex.org' ||
+        uri.pathSegments.length < 2 ||
+        uri.pathSegments[0] != 'title' ||
+        uri.pathSegments[1] != manga.id.toString()) {
+      _showMessage('Tautan MangaDex tidak tersedia.');
+      return;
+    }
+
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        _showMessage('Tidak dapat membuka halaman MangaDex.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage('Gagal membuka MangaDex: $error');
+      }
+    }
+  }
+
+  Future<void> _startReading([MangaChapter? chapter]) async {
+    if (_chaptersLoading) return;
+    if (_chaptersError != null) {
+      _showMessage('Chapter gagal dimuat. Coba muat ulang daftar chapter.');
+      return;
+    }
+    if (_chapters.isEmpty) {
+      _showMessage('Belum ada chapter bahasa Indonesia atau Inggris.');
+      return;
+    }
+
+    final firstChapter =
+        chapter ??
+        _chapters.firstWhere(
+          (item) => double.tryParse(item.chapter) == 1,
+          orElse: () => _chapters.first,
+        );
+    if (double.tryParse(firstChapter.chapter) != 1 && chapter == null) {
+      _showMessage(
+        'Chapter 1 belum tersedia; membuka chapter paling awal yang tersedia.',
+      );
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => ChapterReader(
+              mangaTitle: _currentManga.title,
+              chapter: firstChapter,
+            ),
+      ),
+    );
   }
 
   void _goHome() {
@@ -362,14 +491,18 @@ class _MangaDetailState extends State<MangaDetail> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed:
-                () => _showMessage(
-                  _chapterCount > 0
-                      ? 'Membuka Chapter 1...'
-                      : 'Chapter belum tersedia',
-                ),
+            onPressed: _chaptersLoading ? null : () => _startReading(),
             icon: const Icon(Icons.play_arrow_rounded),
-            label: Text(_chapterCount > 0 ? 'Mulai Baca Ch. 1' : 'Mulai Baca'),
+            label: const Text('Mulai Baca Chapter 1'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _openMangaSource,
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Lihat di MangaDex'),
           ),
         ),
         const SizedBox(height: 8),
@@ -454,24 +587,11 @@ class _MangaDetailState extends State<MangaDetail> {
           ],
         ),
         const SizedBox(height: 18),
-        Row(
-          children: [
-            const Icon(Icons.star, color: Colors.amber, size: 28),
-            const SizedBox(width: 8),
-            Text(
-              '${manga.rating.toStringAsFixed(1)} / 5',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Text(
-              '${manga.view} pembaca',
-              style: const TextStyle(color: Colors.white60),
-            ),
-          ],
+        Text(
+          manga.rating > 0
+              ? 'Rating MangaDex: ${manga.rating.toStringAsFixed(1)}'
+              : 'Rating tidak tersedia dari MangaDex.',
+          style: const TextStyle(color: Colors.white60),
         ),
         const SizedBox(height: 18),
         Text(
@@ -512,145 +632,209 @@ class _MangaDetailState extends State<MangaDetail> {
       title: 'Daftar Chapter',
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _chapterSearch,
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDecoration(
-                    'Cari nomor chapter',
-                    Icons.search,
+          if (!_chaptersLoading &&
+              _chaptersError == null &&
+              _chapters.isNotEmpty) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _chapterSearch,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _inputDecoration(
+                      'Cari nomor atau judul chapter',
+                      Icons.search,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              IconButton(
-                tooltip: 'Urutkan',
-                onPressed: () {
-                  setState(() {
-                    _sortNewest = !_sortNewest;
-                    _rebuildChapters();
-                  });
-                },
-                icon: Icon(
-                  _sortNewest ? Icons.south : Icons.north,
-                  color: Colors.white70,
+                const SizedBox(width: 10),
+                IconButton(
+                  tooltip: 'Urutkan',
+                  onPressed: () {
+                    setState(() {
+                      _sortNewest = !_sortNewest;
+                      _rebuildChapters();
+                    });
+                  },
+                  icon: Icon(
+                    _sortNewest ? Icons.south : Icons.north,
+                    color: Colors.white70,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          if (_visibleChapters.isEmpty)
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Chapter belum tersedia.',
-                style: TextStyle(color: Colors.white60),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (_chaptersLoading)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(color: Color(0xffb77cff)),
+            )
+          else if (_chaptersError != null)
+            _chapterMessage(
+              'Gagal memuat chapter: $_chaptersError',
+              action: TextButton.icon(
+                onPressed: _loadMangaChapters,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Coba lagi'),
               ),
             )
+          else if (_chapters.isEmpty)
+            _chapterMessage(
+              'Belum ada chapter bahasa Indonesia atau Inggris untuk manga ini.',
+            )
+          else if (_visibleChapters.isEmpty)
+            _chapterMessage('Tidak ada chapter yang cocok dengan pencarian.')
           else
-            RepaintBoundary(
-              child: Container(
-                height: 400,
-                padding: const EdgeInsets.all(12),
-                clipBehavior: Clip.hardEdge,
-                decoration: BoxDecoration(
-                  color: const Color(0xff171719),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: .07),
-                  ),
-                ),
-                child: ScrollbarTheme(
-                  data: ScrollbarThemeData(
-                    thumbColor: WidgetStateProperty.all(
-                      Colors.white.withValues(alpha: .28),
+            Column(
+              children: [
+                RepaintBoundary(
+                  child: Container(
+                    height: 400,
+                    padding: const EdgeInsets.all(12),
+                    clipBehavior: Clip.hardEdge,
+                    decoration: BoxDecoration(
+                      color: const Color(0xff171719),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: .07),
+                      ),
                     ),
-                    trackColor: WidgetStateProperty.all(
-                      Colors.white.withValues(alpha: .04),
-                    ),
-                    trackBorderColor: WidgetStateProperty.all(
-                      Colors.transparent,
-                    ),
-                    thickness: WidgetStateProperty.all(5),
-                    radius: const Radius.circular(10),
-                    minThumbLength: 36,
-                  ),
-                  child: Scrollbar(
-                    controller: _chapterScrollController,
-                    thumbVisibility: true,
-                    interactive: true,
-                    child: GridView.builder(
-                      controller: _chapterScrollController,
-                      padding: const EdgeInsets.only(right: 10),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      clipBehavior: Clip.hardEdge,
-                      itemCount: _visibleChapters.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 260,
-                            mainAxisExtent: 62,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                          ),
-                      itemBuilder: (_, index) {
-                        final chapter = _visibleChapters[index];
-                        return Container(
+                    child: ScrollbarTheme(
+                      data: ScrollbarThemeData(
+                        thumbColor: WidgetStateProperty.all(
+                          Colors.white.withValues(alpha: .28),
+                        ),
+                        trackColor: WidgetStateProperty.all(
+                          Colors.white.withValues(alpha: .04),
+                        ),
+                        trackBorderColor: WidgetStateProperty.all(
+                          Colors.transparent,
+                        ),
+                        thickness: WidgetStateProperty.all(5),
+                        radius: const Radius.circular(10),
+                        minThumbLength: 36,
+                      ),
+                      child: Scrollbar(
+                        controller: _chapterScrollController,
+                        thumbVisibility: true,
+                        interactive: true,
+                        child: GridView.builder(
+                          controller: _chapterScrollController,
+                          padding: const EdgeInsets.only(right: 10),
+                          physics: const AlwaysScrollableScrollPhysics(),
                           clipBehavior: Clip.hardEdge,
-                          padding: const EdgeInsets.fromLTRB(12, 9, 8, 7),
-                          decoration: BoxDecoration(
-                            color: const Color(0xff242426),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Chapter $chapter',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color:
-                                            chapter < 4
-                                                ? Colors.white38
-                                                : Colors.white,
-                                        fontWeight: FontWeight.w700,
+                          itemCount: _visibleChapters.length,
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 260,
+                                mainAxisExtent: 62,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                              ),
+                          itemBuilder: (_, index) {
+                            final chapter = _visibleChapters[index];
+                            return Material(
+                              color: const Color(0xff242426),
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () => _startReading(chapter),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    9,
+                                    8,
+                                    7,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              chapter.displayTitle,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${chapter.language.toUpperCase()} · ${chapter.pages} halaman',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Colors.white38,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Rilis ${_currentManga.release}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white38,
-                                        fontSize: 11,
+                                      const Icon(
+                                        Icons.menu_book_outlined,
+                                        size: 18,
+                                        color: Color(0xffd3a7ff),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                              if (chapter < 4)
-                                const Icon(
-                                  Icons.visibility,
-                                  size: 16,
-                                  color: Colors.white30,
-                                ),
-                            ],
-                          ),
-                        );
-                      },
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
+                if (_hasMoreChapters)
+                  TextButton.icon(
+                    onPressed: _loadingMoreChapters ? null : _loadMoreChapters,
+                    icon:
+                        _loadingMoreChapters
+                            ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.expand_more),
+                    label: Text(
+                      _loadingMoreChapters
+                          ? 'Memuat chapter...'
+                          : 'Muat chapter berikutnya',
+                    ),
+                  ),
+              ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chapterMessage(String message, {Widget? action}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xff171719),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: .07)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message,
+            style: const TextStyle(color: Colors.white70, height: 1.5),
+          ),
+          if (action != null) ...[const SizedBox(height: 8), action],
         ],
       ),
     );
@@ -818,7 +1002,7 @@ class _MangaDetailState extends State<MangaDetail> {
 
   bool _hasReleasedChapter(Manga manga) {
     final chapter = manga.chapter.trim().toLowerCase();
-    final chapterNumber = int.tryParse(chapter);
+    final chapterNumber = double.tryParse(chapter);
     return chapter.isNotEmpty &&
         chapter != 'n/a' &&
         chapterNumber != null &&

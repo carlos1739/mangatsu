@@ -46,13 +46,13 @@ class _AnimeCardState extends State<AnimeCard> {
   Future<void> _toggleBookmark() async {
     try {
       setState(() => isLoading = true);
-      
+
       if (isBookmarked) {
         await ApiService.removeBookmark(widget.anime.id);
       } else {
         await ApiService.addBookmark(widget.anime);
       }
-      
+
       setState(() {
         isBookmarked = !isBookmarked;
       });
@@ -127,9 +127,15 @@ class _AnimeCardState extends State<AnimeCard> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.star, size: 16, color: Colors.amber),
-                          const SizedBox(width: 4),
-                          Text(widget.anime.rating.toString()),
+                          if (widget.anime.rating > 0) ...[
+                            const Icon(
+                              Icons.star,
+                              size: 16,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(widget.anime.rating.toString()),
+                          ],
                           const Spacer(),
                           Text(
                             'Ch. ${widget.anime.chapter}',

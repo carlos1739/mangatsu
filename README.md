@@ -25,7 +25,7 @@
 
 **Mangatsu** adalah aplikasi katalog manga untuk menemukan, menelusuri, dan menyimpan manga ke rak buku pribadi. Aplikasi menyediakan antarmuka Flutter Web, REST API Flask, dan penyimpanan akun serta bookmark di MySQL.
 
-Informasi katalog manga diperoleh backend melalui **Tenrai API**. Backend menyediakan endpoint untuk daftar manga, pencarian, detail, dan genre. Data daftar yang berhasil diambil disimpan sementara di cache memori backend selama 24 jam.
+Informasi katalog manga dan chapter diperoleh backend melalui **MangaDex API**. Backend menyediakan endpoint untuk daftar manga, pencarian, detail, genre, chapter, dan halaman baca. Data katalog disimpan sementara di cache memori backend selama 24 jam.
 
 ### Main Goal
 
@@ -48,7 +48,7 @@ Mangatsu bertujuan menyediakan satu tempat untuk:
 | Frontend | Flutter Web |
 | Backend | REST API Flask dan Gunicorn |
 | Database | MySQL 8 |
-| Sumber data katalog | Tenrai API |
+| Sumber katalog dan chapter | MangaDex API |
 | Orkestrasi lokal | Docker Compose |
 | Status autentikasi API | Email/password; belum menggunakan token autentikasi |
 
@@ -70,7 +70,7 @@ Mangatsu menggabungkan penjelajahan katalog dengan rak buku pribadi. Pengguna da
 | Manga pilihan mudah terlupakan | Rak buku/bookmark per akun |
 | Sulit mengingat progres baca | Status `plan`, `reading`, dan `completed` |
 
-Mangatsu adalah aplikasi penemuan dan pengelolaan daftar manga. Aplikasi **bukan** layanan untuk membaca atau meng-host chapter manga.
+Mangatsu adalah aplikasi penemuan, pembacaan chapter yang tersedia di MangaDex, dan pengelolaan daftar manga. Mangatsu tidak meng-host atau menyimpan salinan halaman chapter.
 
 ---
 
@@ -95,7 +95,7 @@ Bagian ini merangkum fitur yang ditemukan pada frontend dan backend proyek saat 
 
 ### 4.1 Manga Catalog and Home
 
-Frontend memuat daftar manga dari backend dan menampilkannya di halaman beranda. Backend meminta daftar manga kepada Tenrai API dan menggunakan cache memori untuk respons yang masih segar.
+Frontend memuat daftar manga dari backend dan menampilkannya di halaman beranda. Backend meminta daftar manga kepada MangaDex API dan menggunakan cache memori untuk respons yang masih segar.
 
 Fungsi yang tersedia:
 
@@ -111,14 +111,14 @@ Fungsi yang tersedia:
 
 ### 4.2 Search
 
-Pengguna dapat mencari manga berdasarkan judul. Pencarian dikirim ke backend dan diteruskan ke Tenrai API.
+Pengguna dapat mencari manga berdasarkan judul. Pencarian dikirim ke backend dan diteruskan ke MangaDex API.
 
 ```text
 Masukkan kata kunci
         ↓
 Flutter mengirim query pencarian
         ↓
-Flask memanggil Tenrai API
+Flask memanggil MangaDex API
         ↓
 Hasil pencarian dikirim ke Flutter
 ```
@@ -139,17 +139,19 @@ Halaman detail menampilkan informasi katalog yang tersedia, misalnya judul, samp
 
 | Method | Endpoint | Keterangan |
 |---|---|---|
-| `GET` | `/api/manga/{manga_id}` | Mengambil detail manga dari katalog eksternal |
+| `GET` | `/api/manga/{manga_id}` | Mengambil detail manga berdasarkan UUID MangaDex |
+| `GET` | `/api/manga/{manga_id}/chapters` | Mengambil chapter bahasa Indonesia dan Inggris |
+| `GET` | `/api/chapter/{chapter_id}/pages` | Mengambil URL halaman baca chapter |
 
-> Halaman detail dapat menampilkan bagian antarmuka chapter dan komunitas, tetapi proyek saat ini tidak menghubungkan bagian tersebut ke layanan konten chapter atau penyimpanan komentar. Bagian tersebut bukan fitur baca manga atau diskusi yang tersimpan di backend.
+> Ketersediaan chapter bergantung pada unggahan dan bahasa yang tersedia di MangaDex. Filter backend meminta konten berlabel `safe`. Halaman dibaca langsung dari server MangaDex dan tidak disimpan di database Mangatsu.
 
 ### 4.4 Genre Exploration
 
-Frontend memiliki halaman eksplorasi dan penyaringan manga berdasarkan genre. Backend juga menyediakan endpoint untuk meminta manga berdasarkan ID genre.
+Frontend memiliki halaman eksplorasi dan penyaringan manga berdasarkan genre. Backend juga menyediakan endpoint untuk meminta manga berdasarkan nama tag MangaDex.
 
 | Method | Endpoint | Keterangan |
 |---|---|---|
-| `GET` | `/api/manga/genre/{genre_id}?page=1` | Meminta daftar manga berdasarkan genre |
+| `GET` | `/api/manga/genre/{genre_name}?page=1` | Meminta daftar manga berdasarkan tag |
 
 ### 4.5 Registration and Login
 
@@ -206,7 +208,7 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 
 | Fitur | Status saat ini | Catatan |
 |---|---|---|
-| Konten chapter untuk dibaca | Belum tersedia | Proyek tidak menyediakan atau menyimpan konten chapter |
+| Reader chapter MangaDex | Tersedia untuk chapter yang tersedia | Mengambil halaman dari MangaDex; tidak menyimpan halaman |
 | Komentar dan review komunitas | Belum terhubung | Area UI detail belum tersambung ke API penyimpanan komentar |
 | Token autentikasi | Belum tersedia | Login belum menerbitkan token dan request bookmark menggunakan `user_id` |
 | Sinkronisasi rak buku lintas perangkat yang aman | Perlu penguatan | Memerlukan autentikasi server-side, misalnya session/token |
@@ -219,10 +221,10 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 
 ### Included in the current project
 
-- Aplikasi Flutter Web untuk katalog manga.
+- Aplikasi Flutter Web untuk katalog dan reader chapter MangaDex.
 - Halaman beranda, pencarian, eksplorasi genre, detail, autentikasi, rak buku, dan profil.
 - Backend REST API Flask.
-- Integrasi backend ke Tenrai API untuk katalog manga.
+- Integrasi backend ke MangaDex API untuk katalog dan chapter.
 - Cache katalog sementara di memori backend.
 - MySQL untuk tabel akun dan bookmark.
 - Docker Compose untuk web, API, database, dan phpMyAdmin.
@@ -230,7 +232,7 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 
 ### Not included in the current project
 
-- Layanan membaca atau meng-host file manga/chapter.
+- Meng-host atau menyimpan salinan file manga/chapter.
 - Pembelian, pembayaran, atau langganan konten.
 - API komentar/review komunitas yang tersimpan.
 - Integrasi OAuth atau sistem token untuk autentikasi request API.
@@ -242,8 +244,9 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 
 | Area | Tanggung jawab Mangatsu | Bukan tanggung jawab Mangatsu |
 |---|---|---|
-| Informasi manga | Meminta dan menyajikan data katalog dari Tenrai API | Menjadi sumber asli seluruh metadata |
-| Daftar pribadi | Menyimpan ID, judul, gambar, dan status bookmark | Menyimpan file manga |
+| Informasi manga | Meminta dan menyajikan data katalog dari MangaDex API | Menjadi sumber asli seluruh metadata |
+| Reader | Meminta daftar chapter dan URL halaman dari MangaDex API | Meng-host atau menyimpan file chapter |
+| Daftar pribadi | Menyimpan UUID MangaDex, judul, gambar, dan status bookmark | Menyimpan file manga |
 | Akun | Registrasi, login, dan hapus akun dasar | SSO, MFA, reset password, dan verifikasi email |
 | Deployment lokal | Menjalankan service lewat Compose | Menyediakan cluster/cloud produksi |
 
@@ -251,7 +254,7 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 
 ## 7. System Architecture
 
-Mangatsu menggunakan arsitektur client-server. Flutter Web berjalan di browser, Flask menyediakan API, MySQL menyimpan data akun dan bookmark, sedangkan Tenrai API menjadi sumber data katalog eksternal.
+Mangatsu menggunakan arsitektur client-server. Flutter Web berjalan di browser, Flask menyediakan API, MySQL menyimpan data akun dan bookmark, sedangkan MangaDex API menjadi sumber katalog dan chapter eksternal.
 
 ### 7.1 Architecture Flow
 
@@ -261,8 +264,8 @@ flowchart LR
     B --> F[Flutter Web<br/>Nginx container]
     F -->|HTTP JSON| A[Flask REST API<br/>Gunicorn]
     A -->|SELECT / INSERT / UPDATE / DELETE| D[(MySQL 8)]
-    A -->|HTTP request katalog| T[Tenrai API]
-    T -->|Data manga| A
+    A -->|HTTP request katalog dan chapter| T[MangaDex API]
+    T -->|Data manga dan halaman baca| A
     A -->|JSON response| F
     P[phpMyAdmin] -->|Administrasi database| D
 ```
@@ -275,7 +278,7 @@ sequenceDiagram
     participant UI as Flutter Web
     participant API as Flask API
     participant Cache as Cache Memori
-    participant Tenrai as Tenrai API
+    participant MangaDex as MangaDex API
 
     User->>UI: Membuka katalog / mencari manga
     UI->>API: GET /api/manga atau /api/manga/search
@@ -283,12 +286,28 @@ sequenceDiagram
     alt Cache masih berlaku
         Cache-->>API: Kembalikan data cache
     else Cache kosong/kedaluwarsa
-        API->>Tenrai: Minta daftar atau hasil pencarian
-        Tenrai-->>API: Data katalog
+        API->>MangaDex: Minta daftar atau hasil pencarian
+        MangaDex-->>API: Data katalog
         API->>Cache: Simpan data selama 24 jam
     end
     API-->>UI: Respons JSON
     UI-->>User: Tampilkan daftar manga
+```
+
+### 7.3 Request Flow — Membaca Chapter
+
+```mermaid
+sequenceDiagram
+    actor User as Pengguna
+    participant UI as Flutter Web
+    participant API as Flask API
+    participant MangaDex as MangaDex API
+    User->>UI: Memilih chapter
+    UI->>API: GET /api/chapter/{chapter_id}/pages
+    API->>MangaDex: GET /at-home/server/{chapter_id}
+    MangaDex-->>API: Hash dan nama file halaman
+    API-->>UI: URL gambar halaman
+    UI->>MangaDex: Memuat gambar halaman
 ```
 
 ### 7.3 Request Flow — Bookmark
@@ -350,7 +369,7 @@ flowchart TD
 | Flask-CORS | Mengaktifkan Cross-Origin Resource Sharing |
 | Gunicorn | Menjalankan aplikasi Flask pada container |
 | PyMySQL | Koneksi dan query MySQL |
-| Requests | Mengakses Tenrai API |
+| Requests | Mengakses MangaDex API |
 | Werkzeug | Hash dan verifikasi password |
 
 ### 8.3 Data and Infrastructure
@@ -361,13 +380,13 @@ flowchart TD
 | Docker | Packaging service |
 | Docker Compose | Menjalankan dan menghubungkan seluruh service |
 | phpMyAdmin | Antarmuka administrasi MySQL untuk lingkungan lokal |
-| Tenrai API | Data katalog manga eksternal |
+| MangaDex API | Data katalog manga dan metadata chapter eksternal |
 
 ### 8.4 External Service Dependency
 
 | Dependensi | Dampak jika tidak tersedia |
 |---|---|
-| Tenrai API | Katalog, pencarian, atau detail manga dapat gagal dimuat |
+| MangaDex API | Katalog, pencarian, detail, chapter, atau halaman baca dapat gagal dimuat |
 | Docker image registry | Build pertama memerlukan koneksi untuk mengunduh image dasar |
 | Flutter package registry | Pengambilan dependency Flutter memerlukan koneksi saat `flutter pub get` |
 
@@ -393,7 +412,7 @@ erDiagram
     BOOKMARKS {
         int id PK
         int user_id FK
-        int manga_id
+        char(36) manga_id
         varchar title
         varchar image_url
         varchar read_status
@@ -416,7 +435,7 @@ erDiagram
 |---|---|---|---|
 | `id` | `int` | Primary key, auto-increment | ID bookmark |
 | `user_id` | `int` | Foreign key ke `users.id` | Pemilik bookmark |
-| `manga_id` | `int` | Wajib | ID manga dari katalog |
+| `manga_id` | `char(36)` | Wajib | UUID manga dari MangaDex |
 | `title` | `varchar(255)` | Wajib | Judul manga yang disimpan |
 | `image_url` | `varchar(500)` | Opsional | URL gambar sampul |
 | `read_status` | `varchar(20)` | Default `plan` | Status baca |
@@ -428,7 +447,7 @@ erDiagram
 |---|---|
 | Primary key pada `users.id` dan `bookmarks.id` | Identitas unik setiap record |
 | Unique key pada `users.email` | Mencegah email akun ganda |
-| Unique key gabungan `(user_id, manga_id)` | Mencegah pengguna menyimpan manga yang sama lebih dari sekali |
+| Unique key gabungan `(user_id, manga_id)` | Mencegah pengguna menyimpan UUID MangaDex yang sama lebih dari sekali |
 | Foreign key `bookmarks.user_id → users.id` | Menjaga relasi bookmark dengan pemilik |
 | `ON DELETE CASCADE` | Menghapus bookmark ketika akun pemilik dihapus |
 
@@ -438,6 +457,8 @@ erDiagram
 - `perpustakaan.sql` dipasang sebagai skrip inisialisasi database pada container MySQL.
 - Skrip inisialisasi image MySQL dijalankan saat direktori data database masih kosong; perubahan SQL tidak otomatis diterapkan ke volume yang sudah terisi.
 - Cache katalog disimpan di memori proses backend, bukan di MySQL. Cache akan hilang saat proses/container backend dimulai ulang dan tidak dibagi antar-worker Gunicorn.
+- UUID MangaDex disimpan sebagai `CHAR(36)` di bookmark.
+- Migrasi provider menghapus bookmark lama yang memakai ID MAL numerik, sesuai pilihan reset, tetapi mempertahankan akun. Lihat `backend_manga/database/migrate_mangadex.sql`.
 
 ---
 
@@ -463,8 +484,12 @@ Content-Type: application/json
 | `GET` | `/api/health` | — | Health check API |
 | `GET` | `/api/manga` | `page` | Daftar manga |
 | `GET` | `/api/manga/search` | `q`, `page` | Pencarian manga |
-| `GET` | `/api/manga/{manga_id}` | Path: `manga_id` | Detail manga |
-| `GET` | `/api/manga/genre/{genre_id}` | Path: `genre_id`; query: `page` | Daftar manga berdasarkan genre |
+| `GET` | `/api/manga/{manga_id}` | Path: UUID MangaDex | Detail manga |
+| `GET` | `/api/manga/genre/{genre_name}` | Path: nama tag; query: `page` | Daftar manga berdasarkan tag |
+| `GET` | `/api/manga/{manga_id}/chapters` | Path: UUID manga; query: `page`, `language` (`id`/`en`) | Daftar chapter |
+| `GET` | `/api/chapter/{chapter_id}/pages` | Path: UUID chapter | URL gambar halaman chapter |
+
+Chapter berbahasa Indonesia diminta bersama chapter berbahasa Inggris sebagai fallback. Endpoint chapter mengembalikan maksimal 100 chapter per halaman; endpoint halaman mengembalikan URL gambar MangaDex.
 
 ### 10.2 Account API
 
@@ -499,7 +524,7 @@ Contoh membuat bookmark:
 ```json
 {
   "user_id": 1,
-  "manga_id": 123,
+  "manga_id": "6b3bfc9e-4e78-4c12-8dcb-dc5e0bb682cf",
   "title": "Judul Manga",
   "image_url": "https://example.com/cover.jpg"
 }
@@ -525,7 +550,7 @@ Contoh memperbarui status baca:
 | Nilai `read_status` tidak diizinkan | `400 Bad Request` |
 | Bookmark untuk update tidak ditemukan | `404 Not Found` |
 | Penghapusan akun terhalang relasi database | `409 Conflict` |
-| Tenrai API timeout atau tidak tersedia | Error gateway/service dari backend |
+| MangaDex API timeout atau tidak tersedia | Error gateway/service dari backend |
 
 > Catatan keamanan: autentikasi login saat ini tidak menghasilkan token. Endpoint bookmark mempercayai `user_id` yang dikirim client. Ini sesuai implementasi sekarang, tetapi belum cukup untuk melindungi data pengguna pada deployment publik.
 
@@ -539,7 +564,7 @@ Docker Compose mendefinisikan empat service:
 |---|---|---:|---|
 | `db` | `manga_db` | — | MySQL dan penyimpanan database |
 | `phpmyadmin` | `manga_pma` | `8082` | Administrasi database |
-| `api` | `manga_api` | `5000` | Flask API dan integrasi Tenrai |
+| `api` | `manga_api` | `5000` | Flask API dan integrasi MangaDex |
 | `web` | `manga_web` | `8080` | Flutter Web yang disajikan Nginx |
 
 ### 11.1 Service Dependencies
@@ -606,6 +631,20 @@ docker compose down
 
 > `docker compose down -v` menghapus named volume `mysql_data` dan seluruh data database lokal. Gunakan hanya jika memang ingin menghapus data tersebut.
 
+#### Migrasi database dari Tenrai ke MangaDex
+
+Jika database MySQL sudah pernah berjalan, skrip inisialisasi tidak dijalankan ulang otomatis. Jalankan migrasi satu kali dari root repository:
+
+```powershell
+Get-Content backend_manga/database/migrate_mangadex.sql | docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'
+```
+
+Migrasi ini menghapus bookmark lama karena ID MAL numerik tidak dapat dipakai sebagai UUID MangaDex. Akun pengguna tetap dipertahankan. Setelah migrasi, build ulang API dan web:
+
+```powershell
+docker compose up --build -d api web
+```
+
 ### 11.4 Run Flutter Locally with Containerized Backend
 
 ```powershell
@@ -643,7 +682,7 @@ Compose meneruskan nilai tersebut ke container MySQL dan API. `.env.example` bol
 | `DB_USER` | User MySQL | `root` |
 | `DB_PASSWORD` | Password MySQL | Kosong pada fallback lokal |
 | `DB_NAME` | Nama database | `perpustakaan` |
-| `TENRAI_API` | Base URL Tenrai API | `https://api.tenrai.org/v1` |
+| `MANGADEX_API` | Base URL MangaDex API | `https://api.mangadex.org` |
 | `SECRET_KEY` | Flask secret key | Nilai development pada kode |
 | `FLASK_DEBUG` | Mode debug saat menjalankan `app.py` langsung | `1` |
 
@@ -685,7 +724,7 @@ Rencana berikut memetakan area yang perlu diuji. Jalankan tes yang tersedia di r
 Uji endpoint melalui Postman atau alat HTTP:
 
 1. Periksa `GET /api/health`.
-2. Periksa katalog, pencarian, detail, dan genre saat Tenrai dapat dijangkau.
+2. Periksa katalog, pencarian, detail, genre, chapter, dan halaman baca saat MangaDex dapat dijangkau.
 3. Uji registrasi dengan input valid, invalid, dan email duplikat.
 4. Uji login dengan password benar dan salah.
 5. Uji operasi bookmark dengan `user_id` valid dan tidak valid.
@@ -704,7 +743,7 @@ Uji endpoint melalui Postman atau alat HTTP:
 
 - Jalankan `docker compose up --build -d` dari kondisi build Flutter yang tersedia.
 - Pastikan `db` menjadi healthy sebelum API mulai melayani request.
-- Pastikan `api` dapat mengakses database dan Tenrai API.
+- Pastikan `api` dapat mengakses database dan MangaDex API.
 - Pastikan `http://localhost:5000/api/health` merespons.
 - Pastikan aplikasi web dapat dibuka melalui `http://localhost:8080`.
 - Periksa log service ketika request gagal.
@@ -725,7 +764,7 @@ Pembagian berikut menghubungkan nama anggota yang dicantumkan tim dengan area ke
 | Anggota / Peran | Area utama | Tanggung jawab |
 |---|---|---|
 | `Carlos — Frontend Flutter` | `project_manga/lib/` | Mengembangkan halaman katalog, pencarian, genre, detail, autentikasi, profil, dan rak buku; menjaga integrasi UI dengan API; menguji build Flutter Web |
-| `Carlos, Yohanes, dan Radhit — Backend API` | `backend_manga/manga_api/` | Mengembangkan endpoint Flask; validasi payload; alur register/login/delete-account; operasi bookmark; integrasi Tenrai API; penanganan respons dan error |
+| `Carlos, Yohanes, dan Radhit — Backend API` | `backend_manga/manga_api/` | Mengembangkan endpoint Flask; validasi payload; alur register/login/delete-account; operasi bookmark; integrasi MangaDex API; penanganan respons dan error |
 | `Yohanes dan Radhit — Database & Infrastructure` | `backend_manga/database/`, `perpustakaan.sql`, `docker-compose.yml` | Mengelola skema MySQL, constraint dan relasi; menjaga konfigurasi koneksi; mengelola volume, health check, dan service Compose |
 | `Carlos, Yohanes dan Radhit — QA & Documentation` | Test plan, Postman, `README.md` | Menyusun skenario uji fungsional/API/integrasi; mencatat hasil pengujian aktual; memeriksa regresi; menjaga dokumentasi langkah menjalankan proyek |
 
