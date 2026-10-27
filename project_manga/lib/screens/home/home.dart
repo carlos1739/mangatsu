@@ -152,14 +152,19 @@ abstract class _HomeStateBase extends State<Beranda> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _openMangaDetail(Manga manga) {
-    Navigator.push(
+  Future<void> _openMangaDetail(Manga manga) async {
+    await Navigator.push<void>(
       context,
       MaterialPageRoute(
         builder:
             (_) => MangaDetail(manga: manga, recommendations: _releasedManga),
       ),
     );
+    if (mounted && _showLibrary) {
+      setState(() {
+        _bookmarksFuture = ApiService.getBookmarks();
+      });
+    }
   }
 
   bool _hasReleasedChapter(Manga manga) {
@@ -209,7 +214,13 @@ abstract class _HomeStateBase extends State<Beranda> {
     }
     setState(() {
       _showLibrary = true;
-      _bookmarksFuture ??= ApiService.getBookmarks();
+      _bookmarksFuture = ApiService.getBookmarks();
+    });
+  }
+
+  void _reloadLibrary() {
+    setState(() {
+      _bookmarksFuture = ApiService.getBookmarks();
     });
   }
 
@@ -237,9 +248,19 @@ abstract class _HomeStateBase extends State<Beranda> {
                     );
                   }
                   if (snapshot.hasError) {
-                    return Text(
-                      'Rak buku belum dapat dimuat.',
-                      style: TextStyle(color: _textColor),
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Rak buku belum dapat dimuat.',
+                          style: TextStyle(color: _textColor),
+                        ),
+                        TextButton.icon(
+                          onPressed: _reloadLibrary,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Coba lagi'),
+                        ),
+                      ],
                     );
                   }
                   final bookmarks = snapshot.data ?? <Manga>[];
@@ -261,6 +282,11 @@ abstract class _HomeStateBase extends State<Beranda> {
                             onPressed:
                                 () => setState(() => _showLibrary = false),
                             child: const Text('Tutup'),
+                          ),
+                          IconButton(
+                            tooltip: 'Muat ulang rak buku',
+                            onPressed: _reloadLibrary,
+                            icon: const Icon(Icons.refresh),
                           ),
                         ],
                       ),
@@ -300,6 +326,21 @@ abstract class _HomeStateBase extends State<Beranda> {
                                             filterQuality: FilterQuality.low,
                                             cacheWidth: 260,
                                             cacheHeight: 320,
+                                            errorBuilder:
+                                                (
+                                                  context,
+                                                  error,
+                                                  stackTrace,
+                                                ) => Container(
+                                                  width: 130,
+                                                  color: _background,
+                                                  alignment: Alignment.center,
+                                                  child: Icon(
+                                                    Icons.menu_book,
+                                                    color: _textColor
+                                                        .withValues(alpha: .55),
+                                                  ),
+                                                ),
                                           ),
                                         ),
                                       ),
