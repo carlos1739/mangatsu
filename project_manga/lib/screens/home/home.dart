@@ -37,7 +37,7 @@ abstract class _HomeStateBase extends State<Beranda> {
   String? _selectedSortOption;
   int _visibleUpdates = 8;
   int _trendingTab = 0;
-  final Set<int> _removedHistory = {};
+  final Set<String> _removedHistory = {};
   bool _showLibrary = false;
 
   int get _appearance => appearanceController.value;
@@ -164,7 +164,7 @@ abstract class _HomeStateBase extends State<Beranda> {
 
   bool _hasReleasedChapter(Manga manga) {
     final chapter = manga.chapter.trim().toLowerCase();
-    final chapterNumber = int.tryParse(chapter);
+    final chapterNumber = double.tryParse(chapter);
     return chapter.isNotEmpty &&
         chapter != 'n/a' &&
         chapterNumber != null &&

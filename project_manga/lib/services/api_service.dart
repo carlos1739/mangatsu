@@ -9,7 +9,7 @@ class ApiService {
   static const String baseUrl = 'http://127.0.0.1:5000/api';
   static const Duration timeout = Duration(seconds: 30);
   static List<Manga>? _mangaCache;
-  static final Map<int, String> bookmarkStatus = {};
+  static final Map<String, String> bookmarkStatus = {};
 
   static Future<List<Manga>> getAllManga() async {
     if (_mangaCache != null) return List<Manga>.of(_mangaCache!);
@@ -35,7 +35,7 @@ class ApiService {
     return data.map((item) => Manga.fromApiJson(item)).toList();
   }
 
-  static Future<Manga> getMangaDetail(int id) async {
+  static Future<Manga> getMangaDetail(String id) async {
     final response = await http
         .get(Uri.parse('$baseUrl/manga/$id'))
         .timeout(timeout);
@@ -43,36 +43,59 @@ class ApiService {
     return Manga.fromApiJson(jsonDecode(response.body)['data']);
   }
 
-  static Future<List<Manga>> getMangaByGenre(List<String> genres) async {
-    final manga = await getAllManga();
-    final matches = _filterByGenres(manga, genres);
-    if (matches.isNotEmpty) return matches;
-
-    final searchResults = <Manga>[];
-    for (final genre in genres) {
-      searchResults.addAll(await searchManga(genre));
+  static Future<MangaChapterPage> getMangaChapters(
+    String mangaId, {
+    int page = 1,
+  }) async {
+    final uri = Uri.parse('$baseUrl/manga/$mangaId/chapters').replace(
+      queryParameters: {
+        'page': '$page',
+        'language': ['id', 'en'],
+      },
+    );
+    final response = await http.get(uri).timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception('Gagal memuat chapter: ${response.statusCode}');
     }
-    final unique = <String, Manga>{
-      for (final item in searchResults) _mangaKey(item): item,
-    };
-    return _filterByGenres(unique.values.toList(), genres);
+    return MangaChapterPage.fromApiJson(jsonDecode(response.body));
   }
 
-  static List<Manga> _filterByGenres(List<Manga> manga, List<String> genres) {
-    return manga
-        .where(
-          (item) => genres.every(
-            (genre) => item.genre.any(
-              (value) =>
-                  value.trim().toLowerCase() == genre.trim().toLowerCase(),
-            ),
-          ),
-        )
-        .toList();
+  static Future<List<String>> getChapterPages(String chapterId) async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/chapter/$chapterId/pages'))
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(
+        body['message']?.toString() ??
+            'Gagal memuat halaman chapter: ${response.statusCode}',
+      );
+    }
+    final pages =
+        (jsonDecode(response.body)['data']['pages'] as List<dynamic>? ?? []);
+    return pages.map((page) => page.toString()).toList();
+  }
+
+  static Future<List<Manga>> getMangaByGenre(List<String> genres) async {
+    final results = <Manga>[];
+    for (final genre in genres) {
+      final uri = Uri.parse(
+        '$baseUrl/manga/genre/${Uri.encodeComponent(genre)}',
+      );
+      final response = await http.get(uri).timeout(timeout);
+      if (response.statusCode != 200) {
+        throw Exception('Gagal memuat genre: ${response.statusCode}');
+      }
+      final data = (jsonDecode(response.body)['data'] as List<dynamic>? ?? []);
+      results.addAll(data.map((item) => Manga.fromApiJson(item)));
+    }
+    return {
+      for (final manga in results) _mangaKey(manga): manga,
+    }.values.toList();
   }
 
   static String _mangaKey(Manga manga) =>
-      manga.id > 0 ? 'id:${manga.id}' : 'title:${manga.title.toLowerCase()}';
+      manga.id.isNotEmpty ? manga.id : manga.title.toLowerCase();
 
   static int _requireUserId() {
     final userId = UserSession.id;
@@ -119,15 +142,15 @@ class ApiService {
     final data = (jsonDecode(response.body)['data'] as List<dynamic>? ?? []);
     bookmarkStatus.clear();
     for (final item in data) {
-      final id = item['mal_id'];
-      if (id is int) {
+      final id = item['id']?.toString();
+      if (id != null && id.isNotEmpty) {
         bookmarkStatus[id] = item['read_status']?.toString() ?? 'plan';
       }
     }
     return data.map((item) => Manga.fromApiJson(item)).toList();
   }
 
-  static Future<bool> isBookmarked(int mangaId) async {
+  static Future<bool> isBookmarked(String mangaId) async {
     final userId = UserSession.id;
     if (userId == null) return false;
     try {
@@ -142,7 +165,7 @@ class ApiService {
     }
   }
 
-  static Future<String?> getBookmarkStatus(int mangaId) async {
+  static Future<String?> getBookmarkStatus(String mangaId) async {
     final userId = UserSession.id;
     if (userId == null) return null;
     try {
@@ -163,7 +186,7 @@ class ApiService {
     }
   }
 
-  static Future<void> removeBookmark(int mangaId) async {
+  static Future<void> removeBookmark(String mangaId) async {
     final userId = _requireUserId();
     final response = await http
         .delete(Uri.parse('$baseUrl/bookmark/$mangaId?user_id=$userId'))
@@ -173,7 +196,10 @@ class ApiService {
     }
   }
 
-  static Future<void> updateBookmarkStatus(int mangaId, String status) async {
+  static Future<void> updateBookmarkStatus(
+    String mangaId,
+    String status,
+  ) async {
     final userId = _requireUserId();
     final response = await http
         .put(

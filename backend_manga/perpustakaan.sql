@@ -30,21 +30,12 @@ SET time_zone = "+00:00";
 CREATE TABLE `bookmarks` (
   `id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
-  `manga_id` int(11) NOT NULL,
+  `manga_id` char(36) NOT NULL,
   `title` varchar(255) NOT NULL,
   `image_url` varchar(500) DEFAULT NULL,
   `read_status` varchar(20) NOT NULL DEFAULT 'plan',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data untuk tabel `bookmarks`
---
-
-INSERT INTO `bookmarks` (`id`, `user_id`, `manga_id`, `title`, `image_url`, `read_status`, `created_at`) VALUES
-(2, 1, 162032, 'Guimi Zhi Zhu', 'https://cdn.myanimelist.net/images/manga/2/287344.jpg', 'plan', '2026-10-09 16:41:18'),
-(3, 1, 1, 'Monster', 'https://cdn.myanimelist.net/images/manga/3/258224.jpg', 'completed', '2026-10-10 01:52:13'),
-(4, 1, 656, 'Vagabond', 'https://cdn.myanimelist.net/images/manga/1/259070.jpg', 'plan', '2026-10-10 01:52:46');
 
 -- --------------------------------------------------------
 
@@ -77,6 +68,9 @@ ALTER TABLE `bookmarks`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uniq_user_manga` (`user_id`,`manga_id`);
 
+ALTER TABLE `bookmarks`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
 --
 -- Indeks untuk tabel `users`
 --
@@ -87,12 +81,6 @@ ALTER TABLE `users`
 --
 -- AUTO_INCREMENT untuk tabel yang dibuang
 --
-
---
--- AUTO_INCREMENT untuk tabel `bookmarks`
---
-ALTER TABLE `bookmarks`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT untuk tabel `users`

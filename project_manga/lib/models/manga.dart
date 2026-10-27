@@ -1,8 +1,8 @@
 class Manga {
-  final int id;
+  final String id;
   final String title;
   final String linkGambar;
-  final String? thumbnailUrl;
+  final String? mangaDexUrl;
   final String chapter;
   final String status;
   final String sinopsis;
@@ -18,7 +18,7 @@ class Manga {
     required this.id,
     required this.title,
     required this.linkGambar,
-    this.thumbnailUrl,
+    this.mangaDexUrl,
     required this.chapter,
     required this.status,
     required this.sinopsis,
@@ -32,94 +32,103 @@ class Manga {
   });
 
   factory Manga.fromApiJson(Map<String, dynamic> json) {
-    final images = json['images'];
-    final jpg =
-        images is Map<String, dynamic>
-            ? images['jpg']
-            : images is Map<dynamic, dynamic>
-            ? images['jpg']
-            : null;
-    final imageUrl =
-        jpg is Map<String, dynamic>
-            ? jpg['image_url']
-            : jpg is Map<dynamic, dynamic>
-            ? jpg['image_url']
-            : null;
-    final smallImageUrl =
-        jpg is Map<String, dynamic>
-            ? jpg['small_image_url']
-            : jpg is Map<dynamic, dynamic>
-            ? jpg['small_image_url']
-            : null;
-    List<String> readNames(dynamic rawValue) {
-      final values =
-          rawValue is String
-              ? rawValue.split(',')
-              : rawValue is List
-              ? rawValue
-              : const <dynamic>[];
-      return values
-          .map(
-            (value) =>
-                value is Map
-                    ? value['name']?.toString().trim() ?? ''
-                    : value.toString().trim(),
-          )
-          .where((name) => name.isNotEmpty)
-          .toList();
-    }
-
-    final genreNames = <String>[];
-    final seenGenres = <String>{};
-    for (final key in const [
-      'genres',
-      'genre',
-      'themes',
-      'theme',
-      'demographics',
-      'demographic',
-      'explicit_genres',
-    ]) {
-      for (final name in readNames(json[key])) {
-        if (seenGenres.add(name.toLowerCase())) {
-          genreNames.add(name);
-        }
-      }
-    }
+    final rawGenres = json['genre'];
+    final genres =
+        rawGenres is List
+            ? rawGenres
+                .map((genre) => genre.toString().trim())
+                .where((genre) => genre.isNotEmpty)
+                .toSet()
+                .toList()
+            : rawGenres is String
+            ? rawGenres
+                .split(',')
+                .map((genre) => genre.trim())
+                .where((genre) => genre.isNotEmpty)
+                .toSet()
+                .toList()
+            : const <String>[];
+    final mangaId = json['id']?.toString() ?? '';
 
     return Manga(
-      id: json['id'] as int? ?? json['mal_id'] as int? ?? 0,
+      id: mangaId,
       title: json['title']?.toString() ?? 'Unknown',
+      mangaDexUrl:
+          json['mangadex_url']?.toString() ??
+          (mangaId.isEmpty ? null : 'https://mangadex.org/title/$mangaId'),
       linkGambar:
-          json['linkGambar']?.toString() ??
           json['link_gambar']?.toString() ??
-          imageUrl?.toString() ??
+          json['cover_url']?.toString() ??
           '',
-      thumbnailUrl:
-          json['thumbnail_url']?.toString() ??
-          json['thumbnailUrl']?.toString() ??
-          smallImageUrl?.toString(),
-      chapter:
-          json['chapter']?.toString() ?? json['chapters']?.toString() ?? 'N/A',
+      chapter: json['chapter']?.toString() ?? 'N/A',
       status: json['status']?.toString() ?? 'Unknown',
       sinopsis: json['synopsis']?.toString() ?? '',
-      release:
-          json['release']?.toString() ?? json['year']?.toString() ?? 'Unknown',
-      genre: genreNames,
+      release: json['release']?.toString() ?? 'Unknown',
+      genre: genres,
       author: json['author']?.toString() ?? 'Unknown',
       bookmark: json['bookmark'] as bool? ?? false,
       likes: json['likes'] as int? ?? 0,
       view: json['view'] as int? ?? 0,
-      rating: (json['rating'] ?? json['score'] ?? 0.0).toDouble(),
+      rating: (json['rating'] ?? 0.0).toDouble(),
     );
   }
 
-  String get cardImageUrl {
-    final thumbnail = thumbnailUrl?.trim() ?? '';
-    return thumbnail.isEmpty ? linkGambar : thumbnail;
+  String get cardImageUrl => linkGambar;
+}
+
+class MangaChapter {
+  final String id;
+  final String chapter;
+  final String title;
+  final String language;
+  final int pages;
+
+  const MangaChapter({
+    required this.id,
+    required this.chapter,
+    required this.title,
+    required this.language,
+    required this.pages,
+  });
+
+  factory MangaChapter.fromApiJson(Map<String, dynamic> json) {
+    return MangaChapter(
+      id: json['id']?.toString() ?? '',
+      chapter: json['chapter']?.toString() ?? '?',
+      title: json['title']?.toString() ?? '',
+      language: json['language']?.toString() ?? '',
+      pages: json['pages'] as int? ?? 0,
+    );
+  }
+
+  String get displayTitle {
+    final chapterLabel = chapter == '?' ? 'Chapter' : 'Chapter $chapter';
+    return title.isEmpty ? chapterLabel : '$chapterLabel · $title';
   }
 }
 
-// Empty - Data dari API
-final allGenre = <String>[];
-final allKomik = <Manga>[];
+class MangaChapterPage {
+  final List<MangaChapter> chapters;
+  final int page;
+  final int total;
+
+  const MangaChapterPage({
+    required this.chapters,
+    required this.page,
+    required this.total,
+  });
+
+  factory MangaChapterPage.fromApiJson(Map<String, dynamic> json) {
+    final chapters =
+        (json['data'] as List<dynamic>? ?? [])
+            .map(
+              (item) => MangaChapter.fromApiJson(item as Map<String, dynamic>),
+            )
+            .toList();
+    return MangaChapterPage(
+      chapters: chapters,
+      page: json['page'] as int? ?? 1,
+      total: json['total'] as int? ?? chapters.length,
+    );
+  }
+}

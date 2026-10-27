@@ -420,19 +420,21 @@ mixin HomeSections on _HomeStateBase {
                     ),
                     Row(
                       children: [
-                        Icon(
-                          Icons.star,
-                          size: 14,
-                          color: Colors.amber.shade700,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          manga.rating.toStringAsFixed(1),
-                          style: TextStyle(
-                            color: _textColor.withValues(alpha: .62),
-                            fontSize: 11,
+                        if (manga.rating > 0) ...[
+                          Icon(
+                            Icons.star,
+                            size: 14,
+                            color: Colors.amber.shade700,
                           ),
-                        ),
+                          const SizedBox(width: 3),
+                          Text(
+                            manga.rating.toStringAsFixed(1),
+                            style: TextStyle(
+                              color: _textColor.withValues(alpha: .62),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                         const Spacer(),
                         Text(
                           manga.status,
