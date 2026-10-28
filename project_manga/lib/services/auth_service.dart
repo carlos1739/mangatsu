@@ -1,9 +1,13 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 class AuthService {
-  static const String baseUrl = 'http://127.0.0.1:5000/api';
+  static String get baseUrl =>
+      kIsWeb
+          ? Uri.base.resolve('/api').toString()
+          : 'http://127.0.0.1:5000/api';
   static const Duration timeout = Duration(seconds: 30);
 
   static Future<Map<String, dynamic>> register({

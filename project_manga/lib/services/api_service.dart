@@ -1,12 +1,16 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:project_manga/models/manga.dart';
 import 'package:project_manga/screens/auth/user/user_session.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:5000/api';
+  static String get baseUrl =>
+      kIsWeb
+          ? Uri.base.resolve('/api').toString()
+          : 'http://127.0.0.1:5000/api';
   static const Duration timeout = Duration(seconds: 30);
   static List<Manga>? _mangaCache;
   static final Map<String, String> bookmarkStatus = {};
