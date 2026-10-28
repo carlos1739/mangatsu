@@ -13,7 +13,7 @@ class Profil extends StatelessWidget {
 
   // SESUAIKAN port Flask (samakan dengan yang dipakai di halaman login/register)
   static String get baseUrl =>
-      kIsWeb ? 'http://localhost:5000' : 'http://10.0.2.2:5000';
+      kIsWeb ? Uri.base.origin : 'http://10.0.2.2:5000';
 
   void _logout(BuildContext context) {
     UserSession.clear();
