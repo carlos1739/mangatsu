@@ -4,6 +4,8 @@ import 'package:project_manga/services/api_service.dart';
 import 'package:project_manga/widgets/anime_card.dart';
 import 'package:project_manga/services/appearance_controller.dart';
 import 'package:project_manga/screens/catalog/chapter_reader.dart';
+import 'package:project_manga/screens/auth/user/user_session.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 class MangaDetail extends StatefulWidget {
@@ -28,7 +30,13 @@ class _MangaDetailState extends State<MangaDetail> {
   bool _showFullSynopsis = false;
   bool _bookmarked = false;
   bool _bookmarkLoading = false;
-  String _readStatus = 'plan'; // <-- baru
+
+  List<Map<String, dynamic>> _reviews = [];
+  bool _reviewsLoading = true;
+  int _selectedRating = 5;
+  final TextEditingController _reviewController = TextEditingController();
+  bool _isSubmittingReview = false;
+  String _readStatus = 'plan';
   int _visibleComments = 3;
   int get _appearance => appearanceController.value;
   Manga? _loadedManga;
@@ -66,6 +74,7 @@ class _MangaDetailState extends State<MangaDetail> {
     _checkBookmark();
     _loadMangaDetail();
     _loadMangaChapters();
+    _loadReviews();
     _chapterSearch.addListener(_onChapterSearchChanged);
   }
 
@@ -144,6 +153,46 @@ class _MangaDetailState extends State<MangaDetail> {
     }
   }
   // [AKHIR]
+
+  // Review
+  Future<void> _loadReviews() async {
+    try {
+      final reviews = await ApiService.getReviews(widget.manga.id);
+      if (!mounted) return;
+      setState(() {
+        _reviews = reviews;
+        _reviewsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _reviewsLoading = false);
+    }
+  }
+
+  // [BARU] Fungsi mengirim ulasan baru
+  Future<void> _submitReview() async {
+    if (!UserSession.isLoggedIn) {
+      _showMessage('Silakan login terlebih dahulu untuk memberi ulasan.');
+      return;
+    }
+    final text = _reviewController.text.trim();
+    if (text.isEmpty) {
+      _showMessage('Tulis ulasan terlebih dahulu.');
+      return;
+    }
+
+    setState(() => _isSubmittingReview = true);
+    try {
+      await ApiService.addReview(widget.manga.id, _selectedRating, text);
+      _reviewController.clear();
+      await _loadReviews();
+      _showMessage('Ulasan berhasil dikirim!');
+    } catch (e) {
+      _showMessage('Gagal mengirim ulasan: $e');
+    } finally {
+      if (mounted) setState(() => _isSubmittingReview = false);
+    }
+  }
 
   Future<void> _loadMangaChapters() async {
     setState(() {
@@ -840,28 +889,152 @@ class _MangaDetailState extends State<MangaDetail> {
     );
   }
 
+  // Update communitySection untuk rating dan ulasan komunitas
   Widget _communitySection() {
-    const comments = <(String, String)>[];
     return _sectionShell(
-      title: 'Community & Review',
+      title: 'Rating & Ulasan Komunitas',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            minLines: 2,
-            maxLines: 4,
-            style: const TextStyle(color: Colors.white),
-            decoration: _inputDecoration(
-              'Tulis komentar tanpa spoiler...',
-              Icons.chat_bubble_outline,
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xff1d1d1f),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tulis Ulasan & Beri Rating',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Text('Rating: ', style: TextStyle(color: Colors.white70)),
+                    for (int i = 1; i <= 5; i++)
+                      InkWell(
+                        onTap: () => setState(() => _selectedRating = i),
+                        child: Icon(
+                          i <= _selectedRating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 26,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _reviewController,
+                  minLines: 2,
+                  maxLines: 4,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _inputDecoration(
+                    'Bagikan pendapatmu tentang manga ini...',
+                    Icons.chat_bubble_outline,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _isSubmittingReview ? null : _submitReview,
+                    child: _isSubmittingReview
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Kirim Ulasan'),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 14),
-          ...comments.take(_visibleComments).map(_commentTile),
-          if (_visibleComments < comments.length)
-            TextButton(
-              onPressed: () => setState(() => _visibleComments += 3),
-              child: const Text('Muat Komentar Lainnya'),
+          const SizedBox(height: 20),
+          if (_reviewsLoading)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+          else if (_reviews.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('Belum ada ulasan untuk manga ini. Jadilah yang pertama!', style: TextStyle(color: Colors.white60)),
+            )
+          else
+            Column(
+              children: [
+                ..._reviews.take(_visibleComments).map(_reviewTile),
+                if (_visibleComments < _reviews.length)
+                  TextButton(
+                    onPressed: () => setState(() => _visibleComments += 3),
+                    child: const Text('Muat Ulasan Lainnya'),
+                  ),
+              ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reviewTile(Map<String, dynamic> review) {
+    final rating = review['rating'] as int? ?? 5;
+    final userName = review['user_name']?.toString() ?? 'Anonim';
+    final comment = review['comment']?.toString() ?? '';
+    final createdAt = review['created_at']?.toString() ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xff1d1d1f),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: .05)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CircleAvatar(
+            backgroundColor: Color(0xff9b5de5),
+            child: Icon(Icons.person, color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      userName,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      createdAt,
+                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    for (int i = 1; i <= 5; i++)
+                      Icon(
+                        i <= rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 14,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  comment,
+                  style: const TextStyle(color: Colors.white70, height: 1.4),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1021,6 +1194,11 @@ class _MangaDetailState extends State<MangaDetail> {
     _chapterSearch.removeListener(_onChapterSearchChanged);
     _chapterSearch.dispose();
     _chapterScrollController.dispose();
+    
+    //============================== PENAMBAHAN KODE STATUS BACA ==========================
+    _reviewController.dispose();
+    //============================== ENDING PENAMBAHAN KODE STATUS BACA ========================== 
+
     super.dispose();
   }
 }

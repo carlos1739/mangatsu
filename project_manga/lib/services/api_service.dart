@@ -216,4 +216,35 @@ class ApiService {
       throw Exception('Failed to update bookmark');
     }
   }
+
+  // Review API methods
+  static Future<List<Map<String, dynamic>>> getReviews(String mangaId) async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/manga/$mangaId/reviews'))
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception('Gagal memuat ulasan');
+    }
+    final data = (jsonDecode(response.body)['data'] as List<dynamic>? ?? []);
+    return data.map((item) => item as Map<String, dynamic>).toList();
+  }
+
+  static Future<void> addReview(String mangaId, int rating, String comment) async {
+    final userId = _requireUserId();
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/manga/$mangaId/reviews'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'user_id': userId,
+            'rating': rating,
+            'comment': comment,
+          }),
+        )
+        .timeout(timeout);
+    if (response.statusCode != 201) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Gagal mengirim ulasan');
+    }
+  }
 }

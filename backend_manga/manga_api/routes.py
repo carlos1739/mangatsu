@@ -338,6 +338,50 @@ def remove_bookmark(manga_id):
     )
     return jsonify({'status': 'success', 'message': 'Bookmark dihapus'}), 200
 
+# Review API routes
+@api.route('/api/manga/<uuid:manga_id>/reviews', methods=['GET'])
+def get_manga_reviews(manga_id):
+    manga_id = str(manga_id)
+    reviews = execute_query(
+        'SELECT r.id, r.user_id, u.nama AS user_name, r.rating, r.comment, r.created_at '
+        'FROM reviews r JOIN users u ON r.user_id = u.id '
+        'WHERE r.manga_id = %s ORDER BY r.created_at DESC',
+        (manga_id,),
+    )
+    for rev in reviews:
+        if isinstance(rev.get('created_at'), datetime):
+            rev['created_at'] = rev['created_at'].strftime('%Y-%m-%d %H:%M')
+    return jsonify({'status': 'success', 'data': reviews}), 200
+
+
+@api.route('/api/manga/<uuid:manga_id>/reviews', methods=['POST'])
+def add_manga_review(manga_id):
+    manga_id = str(manga_id)
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    rating = data.get('rating')
+    comment = (data.get('comment') or '').strip()
+
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'Login dulu untuk memberi ulasan'}), 401
+    
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return jsonify({'status': 'error', 'message': 'user_id tidak valid'}), 400
+
+    if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
+        return jsonify({'status': 'error', 'message': 'Rating harus antara 1 sampai 5 bintang'}), 400
+    
+    if not comment:
+        return jsonify({'status': 'error', 'message': 'Ulasan tidak boleh kosong'}), 400
+
+    execute_write(
+        'INSERT INTO reviews (user_id, manga_id, rating, comment) VALUES (%s, %s, %s, %s)',
+        (user_id, manga_id, rating, comment),
+    )
+    return jsonify({'status': 'success', 'message': 'Ulasan berhasil ditambahkan'}), 201
+
 
 @api.route('/api', methods=['GET'])
 @api.route('/api/health', methods=['GET'])
