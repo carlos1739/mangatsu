@@ -632,6 +632,13 @@ Docker Compose mendefinisikan empat service:
 | `api` | `manga_api` | `5000` | Flask API dan integrasi MangaDex |
 | `web` | `manga_web` | `8080` | Flutter Web yang disajikan Nginx |
 
+### Docker Hub Images
+
+| Sumber | Keterangan | Link |
+|---|---|---|
+| Docker Hub: mangatsu-api | Image backend Flask buatan kelompok | [https://hub.docker.com/r/carlossiregar/mangatsu-api](https://hub.docker.com/r/carlossiregar/mangatsu-api) |
+| Docker Hub: mangatsu-web | Image frontend Flutter buatan kelompok | [https://hub.docker.com/r/carlossiregar/mangatsu-web](https://hub.docker.com/r/carlossiregar/mangatsu-web) |
+
 ### 11.1 Service Dependencies
 
 ```mermaid
