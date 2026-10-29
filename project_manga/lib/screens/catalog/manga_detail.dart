@@ -178,6 +178,49 @@ class _MangaDetailState extends State<MangaDetail> {
     }
   }
 
+  Future<void> _checkFavorite() async {
+    if (!UserSession.isLoggedIn) {
+      if (mounted) setState(() => _isFavorite = false);
+      return;
+    }
+
+    try {
+      final isFavorite = await FavoriteService.isFavorite(widget.manga.id);
+      if (mounted) setState(() => _isFavorite = isFavorite);
+    } catch (error) {
+      if (mounted) _showMessage('Gagal memuat status favorit: $error');
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_favoriteLoading) return;
+    if (!UserSession.isLoggedIn) {
+      _showMessage('Silakan login terlebih dahulu untuk memakai favorit.');
+      return;
+    }
+
+    setState(() => _favoriteLoading = true);
+    try {
+      if (_isFavorite) {
+        await FavoriteService.removeFavorite(widget.manga.id);
+      } else {
+        await FavoriteService.addFavorite(_currentManga);
+      }
+
+      if (!mounted) return;
+      setState(() => _isFavorite = !_isFavorite);
+      _showMessage(
+        _isFavorite
+            ? 'Manga ditambahkan ke Favorit'
+            : 'Manga dihapus dari Favorit',
+      );
+    } catch (error) {
+      if (mounted) _showMessage('Gagal memperbarui Favorit: $error');
+    } finally {
+      if (mounted) setState(() => _favoriteLoading = false);
+    }
+  }
+
   Future<void> _changeStatus(String value) async {
     final old = _readStatus;
     setState(() => _readStatus = value);
@@ -841,9 +884,7 @@ class _MangaDetailState extends State<MangaDetail> {
                     : Icon(
                       _isFavorite ? Icons.favorite : Icons.favorite_border,
                     ),
-            label: Text(
-              _isFavorite ? 'Favorit Tersimpan' : 'Tambah Favorit',
-            ),
+            label: Text(_isFavorite ? 'Favorit Tersimpan' : 'Tambah Favorit'),
           ),
         ),
         // [AKHIR FAVORIT]
