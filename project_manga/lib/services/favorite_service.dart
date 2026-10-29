@@ -18,15 +18,16 @@ class FavoriteService {
   static Future<bool> isFavorite(String mangaId) async {
     final userId = UserSession.id;
     if (userId == null) return false;
-    try {
-      final response = await http
-          .get(Uri.parse('$_base/favorites/$mangaId?user_id=$userId'))
-          .timeout(_timeout);
-      if (response.statusCode != 200) return false;
-      return jsonDecode(response.body)['isFavorite'] == true;
-    } catch (_) {
-      return false;
+    final response = await http
+        .get(Uri.parse('$_base/favorites/$mangaId?user_id=$userId'))
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Gagal memeriksa favorit (${response.statusCode}): ${response.body}',
+      );
     }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return data['isFavorite'] == true;
   }
 
   static Future<void> addFavorite(Manga manga) async {
