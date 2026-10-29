@@ -70,7 +70,7 @@ flutter:
         - asset: assets/fonts/tiltwarp.ttf
     - family: Inter
       fonts:
-        - asset: assets/fonts/inter.ttf
+        - asset: assets/fonts/Inter.ttf
         - asset: assets/fonts/interbold.ttf
           weight: 700
     - family: Tiro
