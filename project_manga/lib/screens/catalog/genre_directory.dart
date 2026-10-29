@@ -14,6 +14,7 @@ class GenreDirectory extends StatefulWidget {
 
 class _GenreDirectoryState extends State<GenreDirectory> {
   late final Future<List<Manga>> _mangaFuture;
+  late final Future<Map<String, int>> _genreCountsFuture;
   final _searchController = TextEditingController();
   static const _knownGenres = <String>[
     'Action',
@@ -76,6 +77,7 @@ class _GenreDirectoryState extends State<GenreDirectory> {
     super.initState();
     appearanceController.addListener(_onAppearanceChanged);
     _mangaFuture = _loadDirectoryManga();
+    _genreCountsFuture = _loadGenreCounts();
   }
 
   void _onAppearanceChanged() {
@@ -83,6 +85,12 @@ class _GenreDirectoryState extends State<GenreDirectory> {
   }
 
   Future<List<Manga>> _loadDirectoryManga() => ApiService.getAllManga();
+
+  Future<Map<String, int>> _loadGenreCounts() async {
+    final manga = await _mangaFuture;
+    final sampleCounts = _genreCounts(manga);
+    return ApiService.getMangaGenreCounts(_allGenres(sampleCounts));
+  }
 
   @override
   void dispose() {
@@ -166,28 +174,52 @@ class _GenreDirectoryState extends State<GenreDirectory> {
           }
 
           final manga = snapshot.data ?? const <Manga>[];
-          final counts = _genreCounts(manga);
-          return ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _searchController,
-            builder: (context, value, child) {
-              final query = value.text.trim().toLowerCase();
-              final genres =
-                  _allGenres(counts)
-                      .where((item) => item.toLowerCase().contains(query))
-                      .toList();
-              return CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _intro(manga, counts)),
-                  SliverToBoxAdapter(child: _searchField()),
-                  SliverToBoxAdapter(
-                    child: _sectionTitle(
-                      'Semua genre',
-                      'Genre, tema, dan demografi dalam satu koleksi',
-                    ),
+          return FutureBuilder<Map<String, int>>(
+            future: _genreCountsFuture,
+            builder: (context, countsSnapshot) {
+              if (countsSnapshot.connectionState != ConnectionState.done) {
+                return const Center(
+                  child: CircularProgressIndicator(color: Color(0xff9a5bea)),
+                );
+              }
+              if (countsSnapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Jumlah manga per genre gagal dimuat: '
+                    '${countsSnapshot.error}',
+                    style: TextStyle(color: _mutedColor),
+                    textAlign: TextAlign.center,
                   ),
-                  _genreGrid(genres, counts),
-                  SliverToBoxAdapter(child: _featuredManga(manga)),
-                ],
+                );
+              }
+              final counts = countsSnapshot.data ?? const <String, int>{};
+              return ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _searchController,
+                builder: (context, value, child) {
+                  final query = value.text.trim().toLowerCase();
+                  final genres =
+                      _allGenres(counts)
+                          .where(
+                            (item) =>
+                                (counts[item] ?? 0) > 0 &&
+                                item.toLowerCase().contains(query),
+                          )
+                          .toList();
+                  return CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(child: _intro(manga, counts)),
+                      SliverToBoxAdapter(child: _searchField()),
+                      SliverToBoxAdapter(
+                        child: _sectionTitle(
+                          'Semua genre',
+                          'Genre, tema, dan demografi dalam satu koleksi',
+                        ),
+                      ),
+                      _genreGrid(genres, counts),
+                      SliverToBoxAdapter(child: _featuredManga(manga)),
+                    ],
+                  );
+                },
               );
             },
           );
@@ -265,7 +297,7 @@ class _GenreDirectoryState extends State<GenreDirectory> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '${manga.length} manga · ${counts.length} genre untuk dijelajahi',
+                        '${manga.length} manga unggulan · ${counts.length} genre untuk dijelajahi',
                         style: TextStyle(
                           color:
                               _isDark

@@ -50,6 +50,55 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `reviews` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `manga_id` char(36) NOT NULL,
+  `rating` tinyint unsigned NOT NULL,
+  `comment` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_reviews_manga_created_at` (`manga_id`, `created_at`),
+  CONSTRAINT `fk_reviews_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `reading_progress` (
+  `user_id` int(11) NOT NULL,
+  `manga_id` char(36) NOT NULL,
+  `manga_title` varchar(255) NOT NULL,
+  `image_url` varchar(500) DEFAULT NULL,
+  `read_status` varchar(20) NOT NULL DEFAULT 'reading',
+  `last_chapter_id` char(36) DEFAULT NULL,
+  `last_chapter_number` varchar(50) DEFAULT NULL,
+  `last_chapter_title` varchar(255) DEFAULT NULL,
+  `last_chapter_language` varchar(10) DEFAULT NULL,
+  `last_read_at` timestamp NULL DEFAULT NULL,
+  `total_chapters` int unsigned NOT NULL DEFAULT 0,
+  `completed_chapters` int unsigned NOT NULL DEFAULT 0,
+  `progress_percent` tinyint unsigned NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`user_id`, `manga_id`),
+  KEY `idx_reading_progress_recent` (`user_id`, `last_read_at`),
+  CONSTRAINT `fk_reading_progress_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `reading_history` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `manga_id` char(36) NOT NULL,
+  `chapter_id` char(36) NOT NULL,
+  `chapter_number` varchar(50) NOT NULL,
+  `chapter_title` varchar(255) DEFAULT NULL,
+  `current_page` smallint unsigned NOT NULL DEFAULT 0,
+  `total_pages` smallint unsigned NOT NULL DEFAULT 0,
+  `first_read_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `last_read_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_reading_history_chapter` (`user_id`, `manga_id`, `chapter_id`),
+  KEY `idx_reading_history_recent` (`user_id`, `last_read_at`),
+  CONSTRAINT `fk_reading_history_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 --
 -- Dumping data untuk tabel `users`
 --

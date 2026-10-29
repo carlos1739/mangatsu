@@ -39,10 +39,7 @@ class _SignInState extends State<SignIn> {
       errorMessage = null;
     });
     try {
-      final data = await AuthService.login(
-        email: email,
-        password: password,
-      );
+      final data = await AuthService.login(email: email, password: password);
       final user = data['user'] as Map<String, dynamic>;
       UserSession.set(user);
       if (!mounted) return;
@@ -126,21 +123,23 @@ class _SignInState extends State<SignIn> {
               width: 200,
               child: OutlinedButton(
                 onPressed: loading ? null : _login,
-                child: loading
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(),
-                      )
-                    : const Text('Login'),
+                child:
+                    loading
+                        ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(),
+                        )
+                        : const Text('Login'),
               ),
             ),
             const SizedBox(height: 25),
             TextButton(
-              onPressed: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const Signup()),
-              ),
+              onPressed:
+                  () => Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const Signup()),
+                  ),
               child: const Text('Belum punya akun? Daftar disini'),
             ),
           ],
