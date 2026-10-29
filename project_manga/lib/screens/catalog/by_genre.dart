@@ -15,17 +15,28 @@ class Bygenre extends StatefulWidget {
 }
 
 class _BygenreState extends State<Bygenre> {
-  late final Future<List<Manga>> _mangaFuture;
-  static const _pageSize = 30;
-  int _currentPage = 1;
+  late Future<MangaGenrePage> _mangaFuture;
+  static const _pageSize = 25;
 
   @override
   void initState() {
     super.initState();
     _mangaFuture =
         widget.manga != null
-            ? Future.value(widget.manga)
-            : ApiService.getMangaByGenre([widget.genreName]);
+            ? Future.value(
+              MangaGenrePage(
+                manga: widget.manga!,
+                page: 1,
+                total: widget.manga!.length,
+              ),
+            )
+            : ApiService.getMangaByGenre(widget.genreName);
+  }
+
+  void _goToPage(int page) {
+    setState(() {
+      _mangaFuture = ApiService.getMangaByGenre(widget.genreName, page: page);
+    });
   }
 
   @override
@@ -42,7 +53,7 @@ class _BygenreState extends State<Bygenre> {
           style: const TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
-      body: FutureBuilder<List<Manga>>(
+      body: FutureBuilder<MangaGenrePage>(
         future: _mangaFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
@@ -59,15 +70,10 @@ class _BygenreState extends State<Bygenre> {
               ),
             );
           }
-          final manga = snapshot.data ?? <Manga>[];
-          final pageCount = (manga.length / _pageSize).ceil();
-          final safePage =
-              pageCount == 0 ? 1 : _currentPage.clamp(1, pageCount);
-          final start = (safePage - 1) * _pageSize;
-          final pageManga = manga
-              .skip(start)
-              .take(_pageSize)
-              .toList(growable: false);
+          final result = snapshot.data!;
+          final manga = result.manga;
+          final pageCount = (result.total / _pageSize).ceil();
+          final safePage = pageCount == 0 ? 1 : result.page;
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -75,7 +81,7 @@ class _BygenreState extends State<Bygenre> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
                     child: Text(
-                      '${manga.length} manga dalam genre ${widget.genreName}',
+                      '${result.total} manga dalam genre ${widget.genreName}',
                       style: const TextStyle(color: Colors.white70),
                     ),
                   ),
@@ -92,7 +98,7 @@ class _BygenreState extends State<Bygenre> {
                   ),
                 )
               else
-                AnimeGrid(komik: pageManga),
+                AnimeGrid(komik: manga),
               if (manga.isNotEmpty && pageCount > 1)
                 SliverToBoxAdapter(child: _pagination(pageCount, safePage)),
             ],
@@ -103,6 +109,53 @@ class _BygenreState extends State<Bygenre> {
   }
 
   Widget _pagination(int pageCount, int currentPage) {
+    final visiblePages =
+        <int>{
+            1,
+            pageCount,
+            for (var page = currentPage - 2; page <= currentPage + 2; page++)
+              if (page > 1 && page < pageCount) page,
+          }.toList()
+          ..sort();
+    final children = <Widget>[];
+    var previousPage = 0;
+    for (final page in visiblePages) {
+      if (previousPage > 0 && page - previousPage > 1) {
+        children.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Center(
+              child: Text('…', style: TextStyle(color: Colors.white70)),
+            ),
+          ),
+        );
+      }
+      children.add(
+        OutlinedButton(
+          onPressed: page == currentPage ? null : () => _goToPage(page),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            disabledForegroundColor: Colors.white,
+            backgroundColor:
+                page == currentPage
+                    ? const Color(0xff9a5bea)
+                    : Colors.transparent,
+            side: BorderSide(
+              color:
+                  page == currentPage
+                      ? const Color(0xff9a5bea)
+                      : Colors.white24,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(9),
+            ),
+          ),
+          child: Text('$page'),
+        ),
+      );
+      previousPage = page;
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
       child: Wrap(
@@ -110,31 +163,19 @@ class _BygenreState extends State<Bygenre> {
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (var page = 1; page <= pageCount; page++)
-            OutlinedButton(
-              onPressed:
-                  page == currentPage
-                      ? null
-                      : () => setState(() => _currentPage = page),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                disabledForegroundColor: Colors.white,
-                backgroundColor:
-                    page == currentPage
-                        ? const Color(0xff9a5bea)
-                        : Colors.transparent,
-                side: BorderSide(
-                  color:
-                      page == currentPage
-                          ? const Color(0xff9a5bea)
-                          : Colors.white24,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
-              ),
-              child: Text('$page'),
-            ),
+          OutlinedButton(
+            onPressed:
+                currentPage > 1 ? () => _goToPage(currentPage - 1) : null,
+            child: const Text('Sebelumnya'),
+          ),
+          ...children,
+          OutlinedButton(
+            onPressed:
+                currentPage < pageCount
+                    ? () => _goToPage(currentPage + 1)
+                    : null,
+            child: const Text('Berikutnya'),
+          ),
         ],
       ),
     );

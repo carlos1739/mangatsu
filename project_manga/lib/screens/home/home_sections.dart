@@ -200,7 +200,13 @@ mixin HomeSections on _HomeStateBase {
                 final trending = _trendingSidebar();
                 return narrow
                     ? Column(
-                      children: [latest, const SizedBox(height: 20), trending],
+                      children: [
+                        latest,
+                        const SizedBox(height: 20),
+                        trending,
+                        const SizedBox(height: 14),
+                        _buildReadingSummaryCard(),
+                      ],
                     )
                     : Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,9 +221,12 @@ mixin HomeSections on _HomeStateBase {
                         const SizedBox(width: 20),
                         Expanded(
                           flex: 3,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: trending,
+                          child: Column(
+                            children: [
+                              SizedBox(width: double.infinity, child: trending),
+                              const SizedBox(height: 14),
+                              _buildReadingSummaryCard(),
+                            ],
                           ),
                         ),
                       ],
@@ -456,115 +465,307 @@ mixin HomeSections on _HomeStateBase {
   }
 
   Widget _trendingSidebar() {
-    final tabs = ['Harian', 'Mingguan', 'Bulanan'];
+    const tabs = ['Harian', 'Mingguan', 'Bulanan'];
+    const periods = ['1 hari', '7 hari', '30 hari'];
     return Container(
-      constraints: const BoxConstraints(minHeight: 430),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _textColor.withValues(alpha: .08)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors:
+              _isDark
+                  ? const [Color(0xff211a2d), Color(0xff1a1921)]
+                  : _isSepia
+                  ? const [Color(0xfffff8e8), Color(0xfff8efdc)]
+                  : const [Colors.white, Color(0xfff8f4ff)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xff9a5bea).withValues(alpha: .18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(
+              0xff6d3dad,
+            ).withValues(alpha: _isDark ? .12 : .06),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                'Trending',
-                style: TextStyle(
-                  color: _textColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xff9a5bea).withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(
+                  Icons.local_fire_department_rounded,
+                  color: Color(0xff9a5bea),
+                  size: 23,
                 ),
               ),
-              const Spacer(),
-              const Icon(
-                Icons.local_fire_department,
-                color: Colors.orange,
-                size: 20,
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Trending ${tabs[_trendingTab]}',
+                      style: TextStyle(
+                        color: _textColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Aktivitas baca dalam ${periods[_trendingTab]} terakhir',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _textColor.withValues(alpha: .55),
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children:
-                tabs.asMap().entries.map((entry) {
-                  final active = _trendingTab == entry.key;
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _trendingTab = entry.key),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 7),
-                        child: Text(
-                          entry.value,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: _background.withValues(alpha: _isDark ? .7 : .8),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children:
+                  tabs.asMap().entries.map((entry) {
+                    final active = _trendingTab == entry.key;
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: active ? null : () => _loadTrending(entry.key),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
                             color:
                                 active
                                     ? const Color(0xff9a5bea)
-                                    : _textColor.withValues(alpha: .55),
-                            fontSize: 11,
-                            fontWeight:
-                                active ? FontWeight.w800 : FontWeight.w500,
+                                    : Colors.transparent,
+                            borderRadius: BorderRadius.circular(9),
+                            boxShadow:
+                                active
+                                    ? [
+                                      BoxShadow(
+                                        color: const Color(
+                                          0xff9a5bea,
+                                        ).withValues(alpha: .2),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ]
+                                    : null,
+                          ),
+                          child: Text(
+                            entry.value,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color:
+                                  active
+                                      ? Colors.white
+                                      : _textColor.withValues(alpha: .6),
+                              fontSize: 11,
+                              fontWeight:
+                                  active ? FontWeight.w700 : FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                    );
+                  }).toList(),
+            ),
           ),
-          Divider(color: _textColor.withValues(alpha: .1)),
-          ..._trendingManga.take(5).toList().asMap().entries.map((entry) {
-            final rising = entry.key % 3 == 0;
-            final stable = entry.key % 3 == 1;
-            return Material(
-              color: Colors.transparent,
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                onTap: () => _openMangaDetail(entry.value),
-                leading: Text(
-                  '${entry.key + 1}',
-                  style: TextStyle(
-                    color: _textColor.withValues(alpha: .55),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                title: Text(
-                  entry.value.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: _textColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                subtitle: Text(
-                  '${entry.value.view} pembaca',
-                  style: TextStyle(
-                    color: _textColor.withValues(alpha: .5),
-                    fontSize: 10,
-                  ),
-                ),
-                trailing: Icon(
-                  stable
-                      ? Icons.horizontal_rule
-                      : rising
-                      ? Icons.arrow_upward
-                      : Icons.arrow_downward,
-                  size: 16,
-                  color:
-                      stable
-                          ? Colors.grey
-                          : rising
-                          ? Colors.green
-                          : Colors.red,
+          const SizedBox(height: 10),
+          if (_trendingLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 36),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xff9a5bea),
+                  strokeWidth: 2,
                 ),
               ),
-            );
-          }),
+            )
+          else if (_trendingError != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+              child: Column(
+                children: [
+                  Text(
+                    'Trending gagal dimuat: $_trendingError',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _textColor.withValues(alpha: .7),
+                      fontSize: 12,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _loadTrending(_trendingTab),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Coba lagi'),
+                  ),
+                ],
+              ),
+            )
+          else if (_trendingManga.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 8),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.auto_graph_rounded,
+                    color: _textColor.withValues(alpha: .38),
+                    size: 26,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Belum ada aktivitas baca untuk periode ini.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _textColor.withValues(alpha: .6),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._trendingManga.take(5).toList().asMap().entries.map((entry) {
+              final index = entry.key;
+              final manga = entry.value;
+              final rankColor =
+                  index == 0
+                      ? const Color(0xfff3a83b)
+                      : index == 1
+                      ? const Color(0xff9a5bea)
+                      : index == 2
+                      ? const Color(0xffc77d54)
+                      : _textColor.withValues(alpha: .45);
+              return Padding(
+                padding: EdgeInsets.only(top: index == 0 ? 0 : 7),
+                child: Material(
+                  color:
+                      index == 0
+                          ? const Color(0xff9a5bea).withValues(alpha: .07)
+                          : Colors.transparent,
+                  borderRadius: BorderRadius.circular(13),
+                  child: InkWell(
+                    onTap: () => _openMangaDetail(manga),
+                    borderRadius: BorderRadius.circular(13),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            child: Text(
+                              '${index + 1}'.padLeft(2, '0'),
+                              style: TextStyle(
+                                color: rankColor,
+                                fontSize: index < 3 ? 14 : 12,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              manga.cardImageUrl,
+                              width: 42,
+                              height: 56,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.low,
+                              cacheWidth: 84,
+                              cacheHeight: 112,
+                              errorBuilder:
+                                  (context, error, stackTrace) => Container(
+                                    width: 42,
+                                    height: 56,
+                                    color: _background,
+                                    alignment: Alignment.center,
+                                    child: Icon(
+                                      Icons.menu_book_rounded,
+                                      size: 20,
+                                      color: _textColor.withValues(alpha: .35),
+                                    ),
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  manga.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: _textColor,
+                                    fontSize: 12,
+                                    height: 1.2,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.visibility_outlined,
+                                      size: 12,
+                                      color: _textColor.withValues(alpha: .48),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${manga.view} pembaca',
+                                      style: TextStyle(
+                                        color: _textColor.withValues(
+                                          alpha: .52,
+                                        ),
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: _textColor.withValues(alpha: .35),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -671,10 +872,8 @@ mixin HomeSections on _HomeStateBase {
                                 }
                                 final position =
                                     _collectionsScrollController.position;
-                                final nextOffset = (position.pixels + 560).clamp(
-                                  0.0,
-                                  position.maxScrollExtent,
-                                );
+                                final nextOffset = (position.pixels + 560)
+                                    .clamp(0.0, position.maxScrollExtent);
                                 _collectionsScrollController.animateTo(
                                   nextOffset,
                                   duration: const Duration(milliseconds: 350),

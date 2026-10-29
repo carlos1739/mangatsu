@@ -1,4 +1,5 @@
 import os
+from threading import local
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import quote
@@ -11,6 +12,7 @@ CACHE_HOURS = 24
 MANGADEX_TIMEOUT = (5, 15)
 LIST_CACHE: dict[str, Any] = {}
 TAG_CACHE: tuple[datetime, dict[str, str]] | None = None
+GENRE_COUNT_CACHE: dict[str, tuple[datetime, int]] = {}
 
 
 def create_http_session():
@@ -19,12 +21,20 @@ def create_http_session():
     return session
 
 
-HTTP_SESSION = create_http_session()
+HTTP_SESSIONS = local()
+
+
+def _http_session():
+    session = getattr(HTTP_SESSIONS, 'session', None)
+    if session is None:
+        session = create_http_session()
+        HTTP_SESSIONS.session = session
+    return session
 
 
 def fetch_mangadex(path: str, params: dict[str, Any] | None = None):
     try:
-        response = HTTP_SESSION.get(
+        response = _http_session().get(
             f'{MANGADEX_API}{path}',
             params=params,
             timeout=MANGADEX_TIMEOUT,

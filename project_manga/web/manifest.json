@@ -1,11 +1,11 @@
 {
-    "name": "project_manga",
-    "short_name": "project_manga",
+    "name": "Mangatsu",
+    "short_name": "Mangatsu",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#101014",
+    "theme_color": "#17131d",
+    "description": "Temukan manga, jelajahi genre, dan lanjutkan progres bacamu.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
