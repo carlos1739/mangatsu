@@ -5,13 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:project_manga/screens/auth/login.dart';
 import 'package:project_manga/screens/auth/user/user_session.dart';
-// SESUAIKAN: path file Beranda (kalau merah, klik "Beranda" lalu Ctrl + .)
 import 'package:project_manga/screens/home/home.dart';
 
 class Profil extends StatelessWidget {
   const Profil({super.key});
 
-  // SESUAIKAN port Flask (samakan dengan yang dipakai di halaman login/register)
   static String get baseUrl =>
       kIsWeb ? Uri.base.origin : 'http://10.0.2.2:5000';
 
@@ -64,39 +62,40 @@ class Profil extends StatelessWidget {
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Akun'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Apakah kamu yakin ingin menghapus akun ini? '
-                'Semua data akan hilang dan tidak bisa dikembalikan.',
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Hapus Akun'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Apakah kamu yakin ingin menghapus akun ini? '
+                    'Semua data akan hilang dan tidak bisa dikembalikan.',
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Masukkan password untuk konfirmasi',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Masukkan password untuk konfirmasi',
-                  border: OutlineInputBorder(),
-                ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Tidak'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Ya', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Tidak'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ya', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
 
     if (confirm != true) return;
@@ -108,9 +107,9 @@ class Profil extends StatelessWidget {
     if (error == null) {
       _goHome(context);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
     }
   }
 
@@ -153,61 +152,68 @@ class Profil extends StatelessWidget {
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: UserSession.isLoggedIn
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _InfoField(label: "Nama", value: UserSession.nama ?? '-'),
-                        const SizedBox(height: 20),
-                        _InfoField(
-                          label: "Email",
-                          value: UserSession.email ?? '-',
-                        ),
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => _logout(context),
-                            child: const Text(
-                              "Logout",
-                              style: TextStyle(fontSize: 18),
+              child:
+                  UserSession.isLoggedIn
+                      ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _InfoField(
+                            label: "Nama",
+                            value: UserSession.nama ?? '-',
+                          ),
+                          const SizedBox(height: 20),
+                          _InfoField(
+                            label: "Email",
+                            value: UserSession.email ?? '-',
+                          ),
+                          const SizedBox(height: 30),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () => _logout(context),
+                              child: const Text(
+                                "Logout",
+                                style: TextStyle(fontSize: 18),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () => _showDeleteDialog(context),
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            label: const Text(
-                              "Hapus Akun",
-                              style: TextStyle(fontSize: 18, color: Colors.red),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.red),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        const Text("Kamu belum login."),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => _logout(context),
-                            child: const Text(
-                              "Ke halaman Login",
-                              style: TextStyle(fontSize: 18),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showDeleteDialog(context),
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              label: const Text(
+                                "Hapus Akun",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.red,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.red),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 30),
+                        ],
+                      )
+                      : Column(
+                        children: [
+                          const Text("Kamu belum login."),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () => _logout(context),
+                              child: const Text(
+                                "Ke halaman Login",
+                                style: TextStyle(fontSize: 18),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
             ),
           ],
         ),

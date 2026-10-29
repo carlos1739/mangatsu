@@ -36,11 +36,17 @@ class _SignupState extends State<Signup> {
     if (name.length < 2 ||
         !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email) ||
         password.length < 8) {
-      setState(() => errorMessage = 'Nama, email valid, dan password minimal 8 karakter wajib diisi');
+      setState(
+        () =>
+            errorMessage =
+                'Nama, email valid, dan password minimal 8 karakter wajib diisi',
+      );
       return;
     }
     if (password != confirmCtr.text) {
-      setState(() => errorMessage = 'Password dan konfirmasi password tidak sama');
+      setState(
+        () => errorMessage = 'Password dan konfirmasi password tidak sama',
+      );
       return;
     }
 
@@ -49,11 +55,7 @@ class _SignupState extends State<Signup> {
       errorMessage = null;
     });
     try {
-      await AuthService.register(
-        name: name,
-        email: email,
-        password: password,
-      );
+      await AuthService.register(name: name, email: email, password: password);
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -133,7 +135,8 @@ class _SignupState extends State<Signup> {
                 hintText: 'Masukkan Password Ulang',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  onPressed: () => setState(() => confirmSecure = !confirmSecure),
+                  onPressed:
+                      () => setState(() => confirmSecure = !confirmSecure),
                   icon: Icon(
                     confirmSecure ? Icons.visibility_off : Icons.visibility,
                   ),
@@ -159,21 +162,23 @@ class _SignupState extends State<Signup> {
               width: 200,
               child: OutlinedButton(
                 onPressed: loading ? null : _register,
-                child: loading
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(),
-                      )
-                    : const Text('Daftar'),
+                child:
+                    loading
+                        ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(),
+                        )
+                        : const Text('Daftar'),
               ),
             ),
             const SizedBox(height: 25),
             TextButton(
-              onPressed: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const SignIn()),
-              ),
+              onPressed:
+                  () => Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SignIn()),
+                  ),
               child: const Text('Sudah punya akun? Login disini'),
             ),
           ],

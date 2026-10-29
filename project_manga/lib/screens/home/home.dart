@@ -29,8 +29,12 @@ abstract class _HomeStateBase extends State<Beranda> {
   Timer? _carouselTimer;
   final ScrollController _collectionsScrollController = ScrollController();
   Future<List<Manga>>? _bookmarksFuture;
+  Future<Map<String, dynamic>>? _readingSummaryFuture;
   List<Manga> _releasedManga = [];
   List<Manga> _trendingManga = [];
+  bool _trendingLoading = true;
+  String? _trendingError;
+  int _trendingRequestId = 0;
   final ValueNotifier<int> _heroIndex = ValueNotifier(0);
   bool isLoading = true;
   String? errorMessage;
@@ -38,6 +42,7 @@ abstract class _HomeStateBase extends State<Beranda> {
   int _visibleUpdates = 8;
   int _trendingTab = 0;
   final Set<String> _removedHistory = {};
+  final Set<String> _deletingProgressMangaIds = {};
   bool _showLibrary = false;
 
   int get _appearance => appearanceController.value;
@@ -63,7 +68,11 @@ abstract class _HomeStateBase extends State<Beranda> {
   @override
   void initState() {
     super.initState();
+    if (UserSession.isLoggedIn) {
+      _readingSummaryFuture = ApiService.getReadingSummary();
+    }
     _loadManga();
+    _loadTrending(_trendingTab);
   }
 
   Future<void> _loadManga() async {
@@ -78,8 +87,6 @@ abstract class _HomeStateBase extends State<Beranda> {
         allManga = manga;
         displayedManga = manga;
         _releasedManga = manga.where(_hasReleasedChapter).toList();
-        _trendingManga = List<Manga>.of(manga)
-          ..sort((a, b) => b.view.compareTo(a.view));
         isLoading = false;
       });
       _startCarousel();
@@ -88,6 +95,34 @@ abstract class _HomeStateBase extends State<Beranda> {
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadTrending(int tab) async {
+    final requestId = ++_trendingRequestId;
+    if (mounted) {
+      setState(() {
+        _trendingTab = tab;
+        _trendingLoading = true;
+        _trendingError = null;
+        _trendingManga = [];
+      });
+    }
+
+    const periods = ['daily', 'weekly', 'monthly'];
+    try {
+      final manga = await ApiService.getTrendingManga(periods[tab]);
+      if (!mounted || requestId != _trendingRequestId) return;
+      setState(() {
+        _trendingManga = manga;
+        _trendingLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _trendingRequestId) return;
+      setState(() {
+        _trendingError = error.toString();
+        _trendingLoading = false;
       });
     }
   }
@@ -160,9 +195,12 @@ abstract class _HomeStateBase extends State<Beranda> {
             (_) => MangaDetail(manga: manga, recommendations: _releasedManga),
       ),
     );
-    if (mounted && _showLibrary) {
+    if (mounted) {
       setState(() {
-        _bookmarksFuture = ApiService.getBookmarks();
+        if (UserSession.isLoggedIn) {
+          _readingSummaryFuture = ApiService.getReadingSummary();
+          if (_showLibrary) _bookmarksFuture = ApiService.getBookmarks();
+        }
       });
     }
   }
@@ -215,13 +253,423 @@ abstract class _HomeStateBase extends State<Beranda> {
     setState(() {
       _showLibrary = true;
       _bookmarksFuture = ApiService.getBookmarks();
+      _readingSummaryFuture = ApiService.getReadingSummary();
     });
   }
 
   void _reloadLibrary() {
     setState(() {
       _bookmarksFuture = ApiService.getBookmarks();
+      _readingSummaryFuture = ApiService.getReadingSummary();
     });
+  }
+
+  void _reloadReadingSummary() {
+    setState(() {
+      _readingSummaryFuture =
+          UserSession.isLoggedIn ? ApiService.getReadingSummary() : null;
+    });
+  }
+
+  Widget _buildReadingSummaryCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _surface,
+            _isDark ? const Color(0xff252035) : const Color(0xfff3edff),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xff9b5de5).withValues(alpha: .2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xff9b5de5).withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.auto_stories_rounded,
+                  color: Color(0xff9b5de5),
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Progres Membaca',
+                      style: TextStyle(
+                        color: _textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Perjalanan baca manga kamu',
+                      style: TextStyle(
+                        color: _textColor.withValues(alpha: .58),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Muat ulang progres',
+                onPressed: _reloadReadingSummary,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (!UserSession.isLoggedIn)
+            _readingProgressEmptyState(
+              'Belum ada progres',
+              'Login untuk menyimpan progres bacaan.',
+            )
+          else
+            FutureBuilder<Map<String, dynamic>>(
+              future: _readingSummaryFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Progres membaca gagal dimuat.',
+                          style: TextStyle(color: _textColor),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _reloadReadingSummary,
+                        child: const Text('Coba lagi'),
+                      ),
+                    ],
+                  );
+                }
+
+                final summary = snapshot.data;
+                final recentProgress =
+                    (summary?['recent_progress'] as List<dynamic>? ?? [])
+                        .whereType<Map<String, dynamic>>()
+                        .map(Manga.fromApiJson)
+                        .toList();
+                if (recentProgress.isEmpty) {
+                  return _readingProgressEmptyState(
+                    'Belum ada progres',
+                    'Manga yang mulai dibaca akan muncul di sini.',
+                  );
+                }
+
+                final totalChapters =
+                    summary?['total_chapters_read'] as int? ?? 0;
+                final seriesCount = summary?['series_count'] as int? ?? 0;
+                final statusCounts =
+                    summary?['status_counts'] as Map<String, dynamic>? ??
+                    const {};
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _readingStat('$seriesCount', 'Manga'),
+                        const SizedBox(width: 8),
+                        _readingStat('$totalChapters', 'Chapter selesai'),
+                        const SizedBox(width: 8),
+                        _readingStat(
+                          '${statusCounts['reading'] ?? 0}',
+                          'Dibaca',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    ...recentProgress.take(4).map(_readingProgressTile),
+                  ],
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _readingStat(String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        decoration: BoxDecoration(
+          color: _surface.withValues(alpha: .8),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: _textColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: _textColor.withValues(alpha: .6),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _readingProgressTile(Manga manga) {
+    final percent = manga.progressPercent.clamp(0, 100);
+    final chapter = manga.lastChapterNumber;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: _surface.withValues(alpha: .78),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(9),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => _openMangaDetail(manga),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: _progressCover(manga),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    manga.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: _textColor,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$percent%',
+                                  style: const TextStyle(
+                                    color: Color(0xff8a4dd0),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 7),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(5),
+                              child: LinearProgressIndicator(
+                                value: percent / 100,
+                                minHeight: 5,
+                                backgroundColor: _textColor.withValues(
+                                  alpha: .1,
+                                ),
+                                color: const Color(0xff9b5de5),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              chapter == null
+                                  ? 'Belum ada chapter'
+                                  : 'Lanjut: Chapter $chapter',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _textColor.withValues(alpha: .58),
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: _textColor.withValues(alpha: .42),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Hapus progres',
+                visualDensity: VisualDensity.compact,
+                onPressed:
+                    _deletingProgressMangaIds.contains(manga.id)
+                        ? null
+                        : () => _confirmDeleteReadingProgress(manga),
+                icon:
+                    _deletingProgressMangaIds.contains(manga.id)
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.redAccent.withValues(alpha: .85),
+                          size: 20,
+                        ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _progressCover(Manga manga) {
+    if (manga.cardImageUrl.isEmpty) {
+      return Container(
+        width: 42,
+        height: 54,
+        color: _background,
+        child: Icon(
+          Icons.menu_book_rounded,
+          color: _textColor.withValues(alpha: .5),
+        ),
+      );
+    }
+    return Image.network(
+      manga.cardImageUrl,
+      width: 42,
+      height: 54,
+      fit: BoxFit.cover,
+      errorBuilder:
+          (_, __, ___) => Container(
+            width: 42,
+            height: 54,
+            color: _background,
+            child: Icon(
+              Icons.menu_book_rounded,
+              color: _textColor.withValues(alpha: .5),
+            ),
+          ),
+    );
+  }
+
+  Future<void> _confirmDeleteReadingProgress(Manga manga) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Hapus progres membaca?'),
+            content: Text(
+              'Progres dan riwayat baca "${manga.title}" akan dihapus. '
+              'Manga di Rak Buku tetap tersimpan.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                ),
+                child: const Text('Hapus'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingProgressMangaIds.add(manga.id));
+    try {
+      await ApiService.deleteReadingProgress(manga.id);
+      if (!mounted) return;
+      setState(() {
+        _deletingProgressMangaIds.remove(manga.id);
+        _readingSummaryFuture = ApiService.getReadingSummary();
+      });
+      _showMessage('Progres "${manga.title}" berhasil dihapus.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deletingProgressMangaIds.remove(manga.id));
+      _showMessage('Gagal menghapus progres: $error');
+    }
+  }
+
+  Widget _readingProgressEmptyState(String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(
+            Icons.menu_book_outlined,
+            color: _textColor.withValues(alpha: .5),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: _textColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: _textColor.withValues(alpha: .65)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildLibrarySection() {
@@ -238,133 +686,157 @@ abstract class _HomeStateBase extends State<Beranda> {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: _textColor.withValues(alpha: .08)),
               ),
-              child: FutureBuilder<List<Manga>>(
-                future: _bookmarksFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const SizedBox(
-                      height: 80,
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Rak buku belum dapat dimuat.',
-                          style: TextStyle(color: _textColor),
-                        ),
-                        TextButton.icon(
-                          onPressed: _reloadLibrary,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Coba lagi'),
-                        ),
-                      ],
-                    );
-                  }
-                  final bookmarks = snapshot.data ?? <Manga>[];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Rak Buku',
-                            style: TextStyle(
-                              color: _textColor,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FutureBuilder<List<Manga>>(
+                    future: _bookmarksFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const SizedBox(
+                          height: 80,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Rak buku belum dapat dimuat.',
+                              style: TextStyle(color: _textColor),
                             ),
-                          ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed:
-                                () => setState(() => _showLibrary = false),
-                            child: const Text('Tutup'),
-                          ),
-                          IconButton(
-                            tooltip: 'Muat ulang rak buku',
-                            onPressed: _reloadLibrary,
-                            icon: const Icon(Icons.refresh),
-                          ),
-                        ],
-                      ),
-                      if (bookmarks.isEmpty)
-                        Text(
-                          'Belum ada manga yang ditandai.',
-                          style: TextStyle(color: _textColor),
-                        )
-                      else
-                        SizedBox(
-                          height: 190,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: bookmarks.length,
-                            separatorBuilder:
-                                (_, __) => const SizedBox(width: 12),
-                            itemBuilder: (_, index) {
-                              final manga = bookmarks[index];
-                              return SizedBox(
-                                width: 130,
-                                child: InkWell(
-                                  onTap: () => _openMangaDetail(manga),
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          child: Image.network(
-                                            manga.cardImageUrl,
-                                            width: 130,
-                                            fit: BoxFit.cover,
-                                            filterQuality: FilterQuality.low,
-                                            cacheWidth: 260,
-                                            cacheHeight: 320,
-                                            errorBuilder:
-                                                (
-                                                  context,
-                                                  error,
-                                                  stackTrace,
-                                                ) => Container(
-                                                  width: 130,
-                                                  color: _background,
-                                                  alignment: Alignment.center,
-                                                  child: Icon(
-                                                    Icons.menu_book,
-                                                    color: _textColor
-                                                        .withValues(alpha: .55),
-                                                  ),
-                                                ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        manga.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: _textColor,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                            TextButton.icon(
+                              onPressed: _reloadLibrary,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Coba lagi'),
+                            ),
+                          ],
+                        );
+                      }
+
+                      final bookmarks = snapshot.data ?? <Manga>[];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Rak Buku',
+                                style: TextStyle(
+                                  color: _textColor,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
                                 ),
-                              );
-                            },
+                              ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed:
+                                    () => setState(() => _showLibrary = false),
+                                child: const Text('Tutup'),
+                              ),
+                              IconButton(
+                                tooltip: 'Muat ulang rak buku',
+                                onPressed: _reloadLibrary,
+                                icon: const Icon(Icons.refresh),
+                              ),
+                            ],
                           ),
-                        ),
-                    ],
-                  );
-                },
+                          if (bookmarks.isEmpty)
+                            Text(
+                              'Belum ada manga yang ditandai.',
+                              style: TextStyle(color: _textColor),
+                            )
+                          else
+                            SizedBox(
+                              height: 210,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: bookmarks.length,
+                                separatorBuilder:
+                                    (_, __) => const SizedBox(width: 12),
+                                itemBuilder: (context, index) {
+                                  final manga = bookmarks[index];
+                                  return SizedBox(
+                                    width: 130,
+                                    child: InkWell(
+                                      onTap: () => _openMangaDetail(manga),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              child: Image.network(
+                                                manga.cardImageUrl,
+                                                width: 130,
+                                                fit: BoxFit.cover,
+                                                filterQuality:
+                                                    FilterQuality.low,
+                                                cacheWidth: 260,
+                                                cacheHeight: 320,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) => Container(
+                                                      width: 130,
+                                                      color: _background,
+                                                      alignment:
+                                                          Alignment.center,
+                                                      child: Icon(
+                                                        Icons.menu_book,
+                                                        color: _textColor
+                                                            .withValues(
+                                                              alpha: .55,
+                                                            ),
+                                                      ),
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            manga.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: _textColor,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          Text(
+                                            manga.lastChapterNumber == null
+                                                ? ApiService.statusLabel(
+                                                  manga.readStatus,
+                                                )
+                                                : 'Chapter ${manga.lastChapterNumber}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: _textColor.withValues(
+                                                alpha: .65,
+                                              ),
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ),
