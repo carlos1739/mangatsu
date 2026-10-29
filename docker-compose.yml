@@ -30,6 +30,7 @@ services:
 
   api:
     build: ./backend_manga
+    image: carlossiregar/mangatsu-api:1.1
     container_name: manga_api
     environment:
       DB_HOST: db
@@ -45,6 +46,7 @@ services:
     
   web:
     build: ./project_manga
+    image: carlossiregar/mangatsu-web:1.1
     container_name: manga_web
     ports:
       - "8080:80"
