@@ -44,10 +44,12 @@ CREATE TABLE `bookmarks` (
 --
 
 CREATE TABLE `users` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `nama` varchar(100) NOT NULL,
   `email` varchar(100) NOT NULL,
-  `password` varchar(255) NOT NULL
+  `password` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `favorit` (
@@ -133,22 +135,6 @@ ALTER TABLE `bookmarks`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- Indeks untuk tabel `users`
---
-ALTER TABLE `users`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `email` (`email`);
-
---
--- AUTO_INCREMENT untuk tabel yang dibuang
---
-
---
--- AUTO_INCREMENT untuk tabel `users`
---
-ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
 --
 -- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)
 --
