@@ -649,17 +649,34 @@ flowchart TD
 
 Database memiliki health check. API dan phpMyAdmin menunggu database sehat sebelum dimulai. `depends_on` pada web mengatur urutan start service, tetapi bukan health check kesiapan endpoint API.
 
-### 11.2 Build and Run
+### 11.2 First Run After Clone
 
-Prasyarat:
+Prasyarat untuk menjalankan seluruh aplikasi:
 
-- Docker Desktop dengan Docker Compose.
-- Flutter SDK untuk menghasilkan aset Flutter Web.
-- File `.env` di direktori root.
+- Git.
+- Docker Desktop dengan Docker Compose aktif.
+- Flutter SDK stable yang kompatibel dengan `project_manga/pubspec.yaml`.
+- Akses internet untuk mengambil dependency, image Docker, dan data MangaDex.
 
-Dari PowerShell, jalankan dari root repository:
+Clone repository lalu masuk ke root project:
 
-```powershell
+```
+git clone https://github.com/carlos1739/mangatsu.git
+cd mangatsu
+```
+
+Buat file konfigurasi lokal dari template, lalu edit password database contoh sebelum menjalankan container:
+
+```
+copy .env.example .env
+notepad .env
+```
+
+Isi `MYSQL_ROOT_PASSWORD` dan `DB_PASSWORD` dengan password lokal pilihanmu. Pastikan `DB_NAME` dan `DB_USER` tetap konsisten dengan konfigurasi contoh, dan jangan commit file `.env`.
+
+Build aset Flutter Web dan mulai semua service:
+
+```
 cd project_manga
 flutter pub get
 flutter build web --release
@@ -668,7 +685,16 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Image web menyalin hasil `project_manga/build/web` ke Nginx. Karena itu, build Flutter Web perlu berhasil sebelum image web dibangun.
+Tunggu sampai service `db` berstatus `healthy` dan `api` serta `web` berstatus `running`. Pemeriksaan endpoint:
+
+```
+curl.exe http://localhost:5000/api/health
+curl.exe -I http://localhost:8080
+```
+
+Buka **http://localhost:8080** untuk menggunakan aplikasi. phpMyAdmin tersedia di **http://localhost:8082**. Build pertama dapat memerlukan waktu karena Docker mengunduh image dan Flutter mengambil package. Image web menyalin hasil `project_manga/build/web` ke Nginx, jadi build Flutter harus berhasil sebelum image web dibuat.
+
+Pada clone pertama, Docker membuat volume database dan menginisialisasi tabel dari `backend_manga/perpustakaan.sql`. Inisialisasi ini hanya berjalan ketika volume MySQL masih kosong; menjalankan ulang Compose tidak menghapus data atau menerapkan ulang skrip SQL.
 
 Alamat lokal:
 
