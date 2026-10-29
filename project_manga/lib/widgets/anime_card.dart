@@ -67,9 +67,9 @@ class _AnimeCardState extends State<AnimeCard> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -81,9 +81,7 @@ class _AnimeCardState extends State<AnimeCard> {
   Widget build(BuildContext context) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Stack(
         children: [
           InkWell(
@@ -108,7 +106,7 @@ class _AnimeCardState extends State<AnimeCard> {
                           (context, error, stackTrace) => const Center(
                             child: Icon(Icons.error, color: Colors.red),
                           ),
-                      ),
+                    ),
                   ),
                 ),
                 Padding(
@@ -120,9 +118,7 @@ class _AnimeCardState extends State<AnimeCard> {
                         widget.anime.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
                       Row(
@@ -153,27 +149,31 @@ class _AnimeCardState extends State<AnimeCard> {
           Positioned(
             top: 8,
             right: 8,
-            child: isLoading
-                ? CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  )
-                : Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: _toggleBookmark,
-                      icon: Icon(
-                        isBookmarked ? Icons.favorite : Icons.favorite_border,
-                        color: isBookmarked ? Colors.red : Colors.white,
-                        size: 20,
+            child:
+                isLoading
+                    ? CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    )
+                    : Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
                       ),
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+                      child: IconButton(
+                        onPressed: _toggleBookmark,
+                        icon: Icon(
+                          isBookmarked ? Icons.favorite : Icons.favorite_border,
+                          color: isBookmarked ? Colors.red : Colors.white,
+                          size: 20,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                      ),
                     ),
-                  ),
           ),
         ],
       ),

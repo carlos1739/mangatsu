@@ -29,6 +29,25 @@ class ApiService {
     return List<Manga>.of(manga);
   }
 
+  static Future<List<Manga>> getTrendingManga(String period) async {
+    final uri = Uri.parse(
+      '$baseUrl/manga/trending',
+    ).replace(queryParameters: {'period': period});
+    final response = await http.get(uri).timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal memuat manga trending',
+        ),
+      );
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final manga = data['data'] as List<dynamic>? ?? const [];
+    return manga.map((item) => Manga.fromApiJson(item)).toList();
+  }
+
   static Future<List<Manga>> searchManga(String query) async {
     final uri = Uri.parse(
       '$baseUrl/manga/search?q=${Uri.encodeQueryComponent(query)}',
@@ -80,31 +99,69 @@ class ApiService {
     return pages.map((page) => page.toString()).toList();
   }
 
-  static Future<List<Manga>> getMangaByGenre(List<String> genres) async {
-    final results = <Manga>[];
-    for (final genre in genres) {
-      final uri = Uri.parse(
-        '$baseUrl/manga/genre/${Uri.encodeComponent(genre)}',
+  static Future<MangaGenrePage> getMangaByGenre(
+    String genre, {
+    int page = 1,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/manga/genre/${Uri.encodeComponent(genre)}',
+    ).replace(queryParameters: {'page': '$page'});
+    final response = await http.get(uri).timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal memuat genre',
+        ),
       );
-      final response = await http.get(uri).timeout(timeout);
-      if (response.statusCode != 200) {
-        throw Exception('Gagal memuat genre: ${response.statusCode}');
-      }
-      final data = (jsonDecode(response.body)['data'] as List<dynamic>? ?? []);
-      results.addAll(data.map((item) => Manga.fromApiJson(item)));
     }
-    return {
-      for (final manga in results) _mangaKey(manga): manga,
-    }.values.toList();
+    return MangaGenrePage.fromApiJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 
-  static String _mangaKey(Manga manga) =>
-      manga.id.isNotEmpty ? manga.id : manga.title.toLowerCase();
+  static Future<Map<String, int>> getMangaGenreCounts(
+    List<String> genres,
+  ) async {
+    final uri = Uri.parse(
+      '$baseUrl/manga/genre-counts',
+    ).replace(queryParameters: {'genres': genres.join('|')});
+    final response = await http.get(uri).timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal memuat jumlah manga per genre',
+        ),
+      );
+    }
+    final data =
+        (jsonDecode(response.body)['data'] as Map<String, dynamic>? ?? {});
+    return data.map((genre, count) => MapEntry(genre, (count as num).toInt()));
+  }
 
   static int _requireUserId() {
     final userId = UserSession.id;
     if (userId == null) throw Exception('Login dulu untuk memakai bookmark');
     return userId;
+  }
+
+  static String _apiErrorMessage(
+    String body, {
+    required int statusCode,
+    required String fallback,
+  }) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic> && decoded['message'] != null) {
+        return decoded['message'].toString();
+      }
+    } on FormatException {
+      // Non-JSON server errors are reported by status code below.
+    }
+    return '$fallback (HTTP $statusCode)';
   }
 
   static String statusLabel(String? status) {
@@ -169,24 +226,129 @@ class ApiService {
     }
   }
 
-  static Future<String?> getBookmarkStatus(String mangaId) async {
+  static Future<Map<String, dynamic>?> getReadingProgress(
+    String mangaId,
+  ) async {
     final userId = UserSession.id;
     if (userId == null) return null;
-    try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/bookmark/$mangaId?user_id=$userId'))
-          .timeout(timeout);
-      if (response.statusCode != 200) return null;
-      final data = jsonDecode(response.body);
-      return data['isBookmarked'] == true
-          ? data['readStatus']?.toString() ?? 'plan'
-          : null;
-    } catch (error) {
-      developer.log(
-        'Error checking bookmark status: $error',
-        name: 'ApiService',
+    final response = await http
+        .get(Uri.parse('$baseUrl/reading/progress/$mangaId?user_id=$userId'))
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal memuat progres membaca',
+        ),
       );
-      return null;
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) return null;
+    return {
+      ...data,
+      'is_bookmarked': body['is_bookmarked'] == true,
+      'has_progress': body['has_progress'] == true,
+    };
+  }
+
+  static Future<int> recordChapterRead(
+    Manga manga,
+    MangaChapter chapter, {
+    required int totalChapters,
+    int currentPage = 0,
+    int totalPages = 0,
+  }) async {
+    final userId = _requireUserId();
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/reading/progress'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'user_id': userId,
+            'manga_id': manga.id,
+            'manga_title': manga.title,
+            'image_url': manga.linkGambar,
+            'chapter_id': chapter.id,
+            'chapter_number': chapter.chapter,
+            'chapter_title': chapter.title,
+            'chapter_language': chapter.language,
+            'total_chapters': totalChapters,
+            'current_page': currentPage,
+            'total_pages': totalPages,
+          }),
+        )
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal menyimpan progres membaca',
+        ),
+      );
+    }
+    final data = jsonDecode(response.body)['data'] as Map<String, dynamic>;
+    return data['progress_percent'] as int? ?? 0;
+  }
+
+  static Future<Map<String, dynamic>> getReadingSummary() async {
+    final userId = _requireUserId();
+    final response = await http
+        .get(Uri.parse('$baseUrl/reading/summary?user_id=$userId'))
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal memuat statistik membaca',
+        ),
+      );
+    }
+    return jsonDecode(response.body)['data'] as Map<String, dynamic>;
+  }
+
+  static Future<void> deleteReadingProgress(String mangaId) async {
+    final userId = _requireUserId();
+    final response = await http
+        .delete(Uri.parse('$baseUrl/reading/progress/$mangaId?user_id=$userId'))
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal menghapus progres membaca',
+        ),
+      );
+    }
+  }
+
+  static Future<void> updateReadingStatus(Manga manga, String status) async {
+    final userId = _requireUserId();
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/reading/status'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'user_id': userId,
+            'manga_id': manga.id,
+            'manga_title': manga.title,
+            'image_url': manga.linkGambar,
+            'read_status': status,
+          }),
+        )
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal memperbarui status baca',
+        ),
+      );
     }
   }
 
@@ -200,36 +362,29 @@ class ApiService {
     }
   }
 
-  static Future<void> updateBookmarkStatus(
-    String mangaId,
-    String status,
-  ) async {
-    final userId = _requireUserId();
-    final response = await http
-        .put(
-          Uri.parse('$baseUrl/bookmark/$mangaId'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'user_id': userId, 'read_status': status}),
-        )
-        .timeout(timeout);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to update bookmark');
-    }
-  }
-
   // Review API methods
   static Future<List<Map<String, dynamic>>> getReviews(String mangaId) async {
     final response = await http
         .get(Uri.parse('$baseUrl/manga/$mangaId/reviews'))
         .timeout(timeout);
     if (response.statusCode != 200) {
-      throw Exception('Gagal memuat ulasan');
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal memuat ulasan',
+        ),
+      );
     }
     final data = (jsonDecode(response.body)['data'] as List<dynamic>? ?? []);
     return data.map((item) => item as Map<String, dynamic>).toList();
   }
 
-  static Future<void> addReview(String mangaId, int rating, String comment) async {
+  static Future<void> addReview(
+    String mangaId,
+    int rating,
+    String comment,
+  ) async {
     final userId = _requireUserId();
     final response = await http
         .post(
@@ -243,8 +398,13 @@ class ApiService {
         )
         .timeout(timeout);
     if (response.statusCode != 201) {
-      final body = jsonDecode(response.body);
-      throw Exception(body['message'] ?? 'Gagal mengirim ulasan');
+      throw Exception(
+        _apiErrorMessage(
+          response.body,
+          statusCode: response.statusCode,
+          fallback: 'Gagal mengirim ulasan',
+        ),
+      );
     }
   }
 }

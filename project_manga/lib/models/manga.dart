@@ -13,6 +13,13 @@ class Manga {
   final int likes;
   final int view;
   final double rating;
+  final String? readStatus;
+  final String? lastChapterId;
+  final String? lastChapterNumber;
+  final String? lastChapterTitle;
+  final int totalChapters;
+  final int completedChapters;
+  final int progressPercent;
 
   const Manga({
     required this.id,
@@ -29,6 +36,13 @@ class Manga {
     required this.likes,
     required this.view,
     required this.rating,
+    this.readStatus,
+    this.lastChapterId,
+    this.lastChapterNumber,
+    this.lastChapterTitle,
+    this.totalChapters = 0,
+    this.completedChapters = 0,
+    this.progressPercent = 0,
   });
 
   factory Manga.fromApiJson(Map<String, dynamic> json) {
@@ -70,6 +84,13 @@ class Manga {
       likes: json['likes'] as int? ?? 0,
       view: json['view'] as int? ?? 0,
       rating: (json['rating'] ?? 0.0).toDouble(),
+      readStatus: json['read_status']?.toString(),
+      lastChapterId: json['last_chapter_id']?.toString(),
+      lastChapterNumber: json['last_chapter_number']?.toString(),
+      lastChapterTitle: json['last_chapter_title']?.toString(),
+      totalChapters: json['total_chapters'] as int? ?? 0,
+      completedChapters: json['completed_chapters'] as int? ?? 0,
+      progressPercent: json['progress_percent'] as int? ?? 0,
     );
   }
 
@@ -129,6 +150,27 @@ class MangaChapterPage {
       chapters: chapters,
       page: json['page'] as int? ?? 1,
       total: json['total'] as int? ?? chapters.length,
+    );
+  }
+}
+
+class MangaGenrePage {
+  final List<Manga> manga;
+  final int page;
+  final int total;
+
+  const MangaGenrePage({
+    required this.manga,
+    required this.page,
+    required this.total,
+  });
+
+  factory MangaGenrePage.fromApiJson(Map<String, dynamic> json) {
+    final data = json['data'] as List<dynamic>? ?? const [];
+    return MangaGenrePage(
+      manga: data.map((item) => Manga.fromApiJson(item)).toList(),
+      page: json['page'] as int? ?? 1,
+      total: json['total'] as int? ?? data.length,
     );
   }
 }
