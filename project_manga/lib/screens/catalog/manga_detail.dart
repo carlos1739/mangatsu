@@ -5,6 +5,7 @@ import 'package:project_manga/widgets/anime_card.dart';
 import 'package:project_manga/services/appearance_controller.dart';
 import 'package:project_manga/screens/catalog/chapter_reader.dart';
 import 'package:project_manga/screens/auth/user/user_session.dart';
+import 'package:project_manga/screens/profile/profile.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -26,17 +27,24 @@ class _MangaDetailState extends State<MangaDetail> {
   static const _maxWidth = 1180.0;
   final _chapterSearch = TextEditingController();
   final _chapterScrollController = ScrollController();
-  bool _sortNewest = true;
+  bool _sortNewest = false;
   bool _showFullSynopsis = false;
   bool _bookmarked = false;
   bool _bookmarkLoading = false;
 
   List<Map<String, dynamic>> _reviews = [];
   bool _reviewsLoading = true;
+  String? _reviewsError;
   int _selectedRating = 5;
   final TextEditingController _reviewController = TextEditingController();
   bool _isSubmittingReview = false;
+  bool _progressLoading = true;
   String _readStatus = 'plan';
+  bool _hasReadingProgress = false;
+  MangaChapter? _lastReadChapter;
+  final Set<String> _completedChapterIds = {};
+  int _progressPercent = 0;
+  int _totalChaptersAvailable = 0;
   int _visibleComments = 3;
   int get _appearance => appearanceController.value;
   Manga? _loadedManga;
@@ -88,23 +96,49 @@ class _MangaDetailState extends State<MangaDetail> {
       if (!mounted) return;
       setState(() {
         _loadedManga = detail;
-        // _bookmarked = detail.bookmark;  // dihapus
       });
     } catch (error) {
       debugPrint('Gagal memuat detail manga ${widget.manga.id}: $error');
     }
   }
 
-  // [UBAH] _checkBookmark diganti: sekarang mengambil status baca
   Future<void> _checkBookmark() async {
-    final status = await ApiService.getBookmarkStatus(widget.manga.id);
-    if (!mounted) return;
-    setState(() {
-      _bookmarked = status != null;
-      if (status != null) _readStatus = status;
-    });
+    try {
+      final progress = await ApiService.getReadingProgress(widget.manga.id);
+      if (!mounted) return;
+      setState(() {
+        _hasReadingProgress = progress?['has_progress'] == true;
+        _bookmarked =
+            progress?['is_bookmarked'] as bool? ?? _currentManga.bookmark;
+        _readStatus = progress?['read_status']?.toString() ?? 'plan';
+        _progressPercent = progress?['progress_percent'] as int? ?? 0;
+        final completedChapterIds = progress?['completed_chapter_ids'];
+        _completedChapterIds
+          ..clear()
+          ..addAll(
+            completedChapterIds is List
+                ? completedChapterIds.map((id) => id.toString())
+                : const <String>[],
+          );
+        _progressLoading = false;
+        final chapterId = progress?['last_chapter_id']?.toString();
+        if (chapterId != null && chapterId.isNotEmpty) {
+          _lastReadChapter = MangaChapter(
+            id: chapterId,
+            chapter: progress?['last_chapter_number']?.toString() ?? '?',
+            title: progress?['last_chapter_title']?.toString() ?? '',
+            language: progress?['last_chapter_language']?.toString() ?? '',
+            pages: 0,
+          );
+        }
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _progressLoading = false);
+        _showMessage('Gagal memuat progres membaca: $error');
+      }
+    }
   }
-  // [AKHIR]
 
   Future<void> _toggleBookmark() async {
     setState(() => _bookmarkLoading = true);
@@ -115,12 +149,10 @@ class _MangaDetailState extends State<MangaDetail> {
         await ApiService.addBookmark(_currentManga);
       }
       if (mounted) {
-        // [UBAH] sebelumnya: setState(() => _bookmarked = !_bookmarked);
         setState(() {
           _bookmarked = !_bookmarked;
-          if (_bookmarked) _readStatus = 'plan';
+          if (_bookmarked && !_hasReadingProgress) _readStatus = 'plan';
         });
-        // [AKHIR]
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -140,22 +172,25 @@ class _MangaDetailState extends State<MangaDetail> {
     }
   }
 
-  // [BARU] fungsi untuk mengubah status baca
   Future<void> _changeStatus(String value) async {
     final old = _readStatus;
     setState(() => _readStatus = value);
     try {
-      await ApiService.updateBookmarkStatus(widget.manga.id, value);
+      await ApiService.updateReadingStatus(_currentManga, value);
+      if (mounted) setState(() => _hasReadingProgress = true);
       _showMessage('Status diperbarui: ${ApiService.statusLabel(value)}');
     } catch (error) {
       if (mounted) setState(() => _readStatus = old);
       _showMessage('Gagal memperbarui status: $error');
     }
   }
-  // [AKHIR]
 
-  // Review
   Future<void> _loadReviews() async {
+    if (!mounted) return;
+    setState(() {
+      _reviewsLoading = true;
+      _reviewsError = null;
+    });
     try {
       final reviews = await ApiService.getReviews(widget.manga.id);
       if (!mounted) return;
@@ -163,13 +198,15 @@ class _MangaDetailState extends State<MangaDetail> {
         _reviews = reviews;
         _reviewsLoading = false;
       });
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _reviewsLoading = false);
+      setState(() {
+        _reviewsLoading = false;
+        _reviewsError = 'Gagal memuat ulasan: $error';
+      });
     }
   }
 
-  // [BARU] Fungsi mengirim ulasan baru
   Future<void> _submitReview() async {
     if (!UserSession.isLoggedIn) {
       _showMessage('Silakan login terlebih dahulu untuk memberi ulasan.');
@@ -208,6 +245,7 @@ class _MangaDetailState extends State<MangaDetail> {
       setState(() {
         _chapters = result.chapters;
         _chaptersPage = result.page;
+        _totalChaptersAvailable = result.total;
         _hasMoreChapters = result.page * 100 < result.total;
         _chaptersLoading = false;
         _rebuildChapters();
@@ -233,6 +271,7 @@ class _MangaDetailState extends State<MangaDetail> {
       setState(() {
         _chapters = [..._chapters, ...result.chapters];
         _chaptersPage = result.page;
+        _totalChaptersAvailable = result.total;
         _hasMoreChapters = result.page * 100 < result.total;
         _loadingMoreChapters = false;
         _rebuildChapters();
@@ -277,6 +316,154 @@ class _MangaDetailState extends State<MangaDetail> {
     _visibleChapters = filtered;
   }
 
+  List<MangaChapter> _orderedReadingChapters() {
+    final chapters = List<MangaChapter>.of(_chapters);
+    chapters.sort((a, b) {
+      final aNumber = double.tryParse(a.chapter);
+      final bNumber = double.tryParse(b.chapter);
+      final comparison =
+          aNumber != null && bNumber != null
+              ? aNumber.compareTo(bNumber)
+              : a.chapter.compareTo(b.chapter);
+      return comparison != 0 ? comparison : a.language.compareTo(b.language);
+    });
+    return chapters;
+  }
+
+  int _compareChapterNumbers(MangaChapter first, MangaChapter second) {
+    final firstNumber = double.tryParse(first.chapter);
+    final secondNumber = double.tryParse(second.chapter);
+    if (firstNumber != null && secondNumber != null) {
+      return firstNumber.compareTo(secondNumber);
+    }
+    return first.chapter.compareTo(second.chapter);
+  }
+
+  bool _hasAdjacentChapter(MangaChapter chapter, {required bool next}) {
+    final chapters = _orderedReadingChapters();
+    final hasLoadedAdjacent = chapters.any((item) {
+      final comparison = _compareChapterNumbers(item, chapter);
+      if (next) {
+        return comparison > 0 && !_completedChapterIds.contains(item.id);
+      }
+      return comparison < 0;
+    });
+    if (hasLoadedAdjacent) return true;
+    return next && _hasMoreChapters;
+  }
+
+  Future<MangaChapter?> _getNextUnreadChapter(MangaChapter? chapter) async {
+    while (true) {
+      final unread =
+          _orderedReadingChapters()
+              .where(
+                (item) =>
+                    (chapter == null ||
+                        _compareChapterNumbers(item, chapter) > 0) &&
+                    !_completedChapterIds.contains(item.id),
+              )
+              .toList();
+      if (unread.isNotEmpty) {
+        final next = unread.first;
+        if (chapter == null) return next;
+        return unread.firstWhere(
+          (item) =>
+              item.chapter == next.chapter && item.language == chapter.language,
+          orElse: () => next,
+        );
+      }
+      if (!_hasMoreChapters) return null;
+
+      final result = await ApiService.getMangaChapters(
+        widget.manga.id,
+        page: _chaptersPage + 1,
+      );
+      if (!mounted) return null;
+      if (result.page <= _chaptersPage && result.chapters.isEmpty) return null;
+      setState(() {
+        _chapters = [..._chapters, ...result.chapters];
+        _chaptersPage = result.page;
+        _totalChaptersAvailable = result.total;
+        _hasMoreChapters = result.page * 100 < result.total;
+        _rebuildChapters();
+      });
+    }
+  }
+
+  Future<MangaChapter?> _getAdjacentChapter(
+    MangaChapter chapter, {
+    required bool next,
+  }) async {
+    if (next) return _getNextUnreadChapter(chapter);
+
+    while (true) {
+      final chapters = _orderedReadingChapters();
+      final adjacent =
+          chapters.where((item) {
+            final comparison = _compareChapterNumbers(item, chapter);
+            return next ? comparison > 0 : comparison < 0;
+          }).toList();
+      if (adjacent.isNotEmpty) {
+        final target = next ? adjacent.first : adjacent.last;
+        return adjacent.firstWhere(
+          (item) =>
+              item.chapter == target.chapter &&
+              item.language == chapter.language,
+          orElse: () => target,
+        );
+      }
+      if (!next || !_hasMoreChapters) return null;
+
+      final result = await ApiService.getMangaChapters(
+        widget.manga.id,
+        page: _chaptersPage + 1,
+      );
+      if (!mounted) return null;
+      setState(() {
+        _chapters = [..._chapters, ...result.chapters];
+        _chaptersPage = result.page;
+        _totalChaptersAvailable = result.total;
+        _hasMoreChapters = result.page * 100 < result.total;
+        _rebuildChapters();
+      });
+    }
+  }
+
+  ChapterReader _buildChapterReader(MangaChapter chapter) {
+    return ChapterReader(
+      mangaTitle: _currentManga.title,
+      chapter: chapter,
+      hasPreviousChapter: _hasAdjacentChapter(chapter, next: false),
+      hasNextChapter: _hasAdjacentChapter(chapter, next: true),
+      onNavigateChapter: (next) => _getAdjacentChapter(chapter, next: next),
+      readerBuilder: _buildChapterReader,
+      onPageProgress:
+          UserSession.isLoggedIn
+              ? (currentPage, totalPages) async {
+                final percent = await ApiService.recordChapterRead(
+                  _currentManga,
+                  chapter,
+                  totalChapters: _totalChaptersAvailable,
+                  currentPage: currentPage,
+                  totalPages: totalPages,
+                );
+                if (mounted) {
+                  setState(() {
+                    _progressPercent = percent;
+                    _hasReadingProgress = true;
+                    _lastReadChapter = chapter;
+                    _readStatus = 'reading';
+                    if (currentPage >= totalPages) {
+                      _completedChapterIds.add(chapter.id);
+                    }
+                  });
+                }
+                return percent;
+              }
+              : null,
+    );
+  }
+
   void _cycleAppearance() {
     appearanceController.cycle();
   }
@@ -316,28 +503,64 @@ class _MangaDetailState extends State<MangaDetail> {
       _showMessage('Belum ada chapter bahasa Indonesia atau Inggris.');
       return;
     }
-
-    final firstChapter =
-        chapter ??
-        _chapters.firstWhere(
-          (item) => double.tryParse(item.chapter) == 1,
-          orElse: () => _chapters.first,
-        );
-    if (double.tryParse(firstChapter.chapter) != 1 && chapter == null) {
-      _showMessage(
-        'Chapter 1 belum tersedia; membuka chapter paling awal yang tersedia.',
-      );
+    if (_totalChaptersAvailable < 1) {
+      _showMessage('Jumlah chapter tersedia belum dapat dimuat.');
+      return;
     }
+
+    MangaChapter? firstChapter;
+    try {
+      firstChapter =
+          chapter ??
+          (_lastReadChapter != null &&
+                  !_completedChapterIds.contains(_lastReadChapter!.id)
+              ? _lastReadChapter
+              : await _getNextUnreadChapter(_lastReadChapter));
+    } catch (error) {
+      _showMessage('Gagal mencari chapter yang belum dibaca: $error');
+      return;
+    }
+    final selectedChapter = firstChapter;
+    if (selectedChapter == null) {
+      _showMessage('Semua chapter yang tersedia sudah selesai dibaca.');
+      return;
+    }
+    if (double.tryParse(selectedChapter.chapter) != 1 && chapter == null) {
+      if (_lastReadChapter == null) {
+        _showMessage(
+          'Chapter 1 belum tersedia; membuka chapter paling awal yang tersedia.',
+        );
+      }
+    }
+    if (UserSession.isLoggedIn) {
+      try {
+        final percent = await ApiService.recordChapterRead(
+          _currentManga,
+          selectedChapter,
+          totalChapters: _totalChaptersAvailable,
+        );
+        if (mounted) {
+          setState(() {
+            _hasReadingProgress = true;
+            _readStatus = 'reading';
+            _lastReadChapter = selectedChapter;
+            _progressPercent = percent;
+          });
+        }
+      } catch (error) {
+        if (mounted) {
+          _showMessage('Progres tidak tersimpan: $error');
+        }
+      }
+    } else {
+      _showMessage('Login untuk menyimpan progres membaca.');
+    }
+    if (!mounted) return;
     await Navigator.push<void>(
       context,
-      MaterialPageRoute(
-        builder:
-            (_) => ChapterReader(
-              mangaTitle: _currentManga.title,
-              chapter: firstChapter,
-            ),
-      ),
+      MaterialPageRoute(builder: (_) => _buildChapterReader(selectedChapter)),
     );
+    if (mounted && UserSession.isLoggedIn) _checkBookmark();
   }
 
   void _goHome() {
@@ -396,10 +619,18 @@ class _MangaDetailState extends State<MangaDetail> {
                 color: Colors.white,
               ),
             ),
-            const CircleAvatar(
-              radius: 16,
-              backgroundColor: Color(0xffd3a7ff),
-              child: Icon(Icons.person, color: Color(0xff30203e), size: 20),
+            IconButton(
+              tooltip: 'Profil',
+              onPressed:
+                  () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute<void>(builder: (_) => const Profil()),
+                  ),
+              icon: const CircleAvatar(
+                radius: 16,
+                backgroundColor: Color(0xffd3a7ff),
+                child: Icon(Icons.person, color: Color(0xff30203e), size: 20),
+              ),
             ),
             const SizedBox(width: 18),
           ],
@@ -432,9 +663,9 @@ class _MangaDetailState extends State<MangaDetail> {
                   children: [
                     _heroSection(),
                     const SizedBox(height: 36),
-                    _chapterSection(),
-                    const SizedBox(height: 36),
                     _communitySection(),
+                    const SizedBox(height: 36),
+                    _chapterSection(),
                     const SizedBox(height: 36),
                     _recommendationSection(),
                   ],
@@ -540,9 +771,28 @@ class _MangaDetailState extends State<MangaDetail> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: _chaptersLoading ? null : () => _startReading(),
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Mulai Baca Chapter 1'),
+            onPressed:
+                _chaptersLoading || _progressLoading
+                    ? null
+                    : () => _startReading(),
+            icon: Icon(
+              _progressLoading
+                  ? Icons.hourglass_empty
+                  : _lastReadChapter == null
+                  ? Icons.play_arrow_rounded
+                  : Icons.play_circle_outline,
+            ),
+            label: Text(
+              _progressLoading
+                  ? 'Memuat progres baca...'
+                  : _lastReadChapter == null
+                  ? 'Mulai Baca Chapter 1'
+                  : _completedChapterIds.contains(_lastReadChapter!.id)
+                  ? 'Baca chapter selanjutnya'
+                  : 'Lanjutkan ${_lastReadChapter!.displayTitle}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -563,8 +813,7 @@ class _MangaDetailState extends State<MangaDetail> {
             label: Text(_bookmarked ? 'Tersimpan' : 'Bookmark'),
           ),
         ),
-        // [BARU] dropdown status baca, hanya muncul jika sudah di-bookmark
-        if (_bookmarked) ...[
+        if (_bookmarked || _hasReadingProgress) ...[
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -593,7 +842,6 @@ class _MangaDetailState extends State<MangaDetail> {
             ),
           ),
         ],
-        // [AKHIR]
       ],
     );
     return compact
@@ -642,6 +890,36 @@ class _MangaDetailState extends State<MangaDetail> {
               : 'Rating tidak tersedia dari MangaDex.',
           style: const TextStyle(color: Colors.white60),
         ),
+        if (_hasReadingProgress) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Progres baca',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+              Text(
+                '$_progressPercent%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: (_progressPercent.clamp(0, 100)) / 100,
+              minHeight: 7,
+              backgroundColor: Colors.white.withValues(alpha: .14),
+              color: const Color(0xffb77cff),
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         Text(
           synopsis,
@@ -889,7 +1167,6 @@ class _MangaDetailState extends State<MangaDetail> {
     );
   }
 
-  // Update communitySection untuk rating dan ulasan komunitas
   Widget _communitySection() {
     return _sectionShell(
       title: 'Rating & Ulasan Komunitas',
@@ -908,12 +1185,19 @@ class _MangaDetailState extends State<MangaDetail> {
               children: [
                 const Text(
                   'Tulis Ulasan & Beri Rating',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    const Text('Rating: ', style: TextStyle(color: Colors.white70)),
+                    const Text(
+                      'Rating: ',
+                      style: TextStyle(color: Colors.white70),
+                    ),
                     for (int i = 1; i <= 5; i++)
                       InkWell(
                         onTap: () => setState(() => _selectedRating = i),
@@ -941,37 +1225,106 @@ class _MangaDetailState extends State<MangaDetail> {
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: _isSubmittingReview ? null : _submitReview,
-                    child: _isSubmittingReview
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Kirim Ulasan'),
+                    child:
+                        _isSubmittingReview
+                            ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                            : const Text('Kirim Ulasan'),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          if (_reviewsLoading)
-            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-          else if (_reviews.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Belum ada ulasan untuk manga ini. Jadilah yang pertama!', style: TextStyle(color: Colors.white60)),
-            )
-          else
-            Column(
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xff1d1d1f),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ..._reviews.take(_visibleComments).map(_reviewTile),
-                if (_visibleComments < _reviews.length)
-                  TextButton(
-                    onPressed: () => setState(() => _visibleComments += 3),
-                    child: const Text('Muat Ulasan Lainnya'),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _reviewsLoading || _reviewsError != null
+                            ? 'Ulasan'
+                            : 'Ulasan (${_reviews.length})',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Muat ulang ulasan',
+                      onPressed: _reviewsLoading ? null : _loadReviews,
+                      color: const Color(0xffc28aff),
+                      icon:
+                          _reviewsLoading
+                              ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
+                if (_reviewsLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'Memuat ulasan...',
+                      style: TextStyle(color: Colors.white60),
+                    ),
+                  )
+                else if (_reviewsError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: Text(
+                      'Ulasan gagal dimuat. Tekan ikon muat ulang untuk mencoba lagi.\n$_reviewsError',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        height: 1.5,
+                      ),
+                    ),
+                  )
+                else if (_reviews.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'Belum ada ulasan untuk manga ini. Jadilah yang pertama!',
+                      style: TextStyle(color: Colors.white60),
+                    ),
+                  )
+                else ...[
+                  const SizedBox(height: 8),
+                  ..._reviews.take(_visibleComments).map(_reviewTile),
+                  if (_visibleComments < _reviews.length)
+                    Center(
+                      child: TextButton(
+                        onPressed: () => setState(() => _visibleComments += 3),
+                        child: const Text('Muat Ulasan Lainnya'),
+                      ),
+                    ),
+                ],
               ],
             ),
+          ),
         ],
       ),
     );
@@ -1008,11 +1361,17 @@ class _MangaDetailState extends State<MangaDetail> {
                   children: [
                     Text(
                       userName,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     Text(
                       createdAt,
-                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -1031,66 +1390,6 @@ class _MangaDetailState extends State<MangaDetail> {
                 Text(
                   comment,
                   style: const TextStyle(color: Colors.white70, height: 1.4),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _commentTile((String, String) comment) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xff1d1d1f),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const CircleAvatar(child: Icon(Icons.person, size: 18)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  comment.$1,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Baru saja',
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
-                ),
-                const SizedBox(height: 6),
-                Text(comment.$2, style: const TextStyle(color: Colors.white70)),
-                const SizedBox(height: 6),
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.thumb_up_alt_outlined,
-                      size: 15,
-                      color: Colors.white54,
-                    ),
-                    SizedBox(width: 5),
-                    Text(
-                      'Like',
-                      style: TextStyle(color: Colors.white54, fontSize: 11),
-                    ),
-                    SizedBox(width: 14),
-                    Icon(
-                      Icons.thumb_down_alt_outlined,
-                      size: 15,
-                      color: Colors.white54,
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -1194,10 +1493,8 @@ class _MangaDetailState extends State<MangaDetail> {
     _chapterSearch.removeListener(_onChapterSearchChanged);
     _chapterSearch.dispose();
     _chapterScrollController.dispose();
-    
-    //============================== PENAMBAHAN KODE STATUS BACA ==========================
+
     _reviewController.dispose();
-    //============================== ENDING PENAMBAHAN KODE STATUS BACA ========================== 
 
     super.dispose();
   }
