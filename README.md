@@ -102,12 +102,16 @@ Fungsi yang tersedia:
 - Memuat daftar manga dengan paginasi API.
 - Menampilkan kartu manga dengan sampul dan informasi katalog yang tersedia.
 - Menyaring atau mengurutkan daftar yang telah dimuat pada sisi aplikasi.
+- Menampilkan ranking Trending Harian, Mingguan, dan Bulanan berdasarkan aktivitas baca Mangatsu dalam 1, 7, dan 30 hari terakhir.
 - Menampilkan keadaan memuat dan menyediakan aksi untuk mencoba kembali apabila pemuatan gagal.
 
 | Operasi | Endpoint | Hasil |
 |---|---|---|
 | Memuat daftar manga | `GET /api/manga?page=1` | Daftar manga dari katalog |
 | Memuat halaman berikutnya | `GET /api/manga?page={page}` | Halaman daftar yang diminta |
+| Memuat ranking trending | `GET /api/manga/trending?period=daily` | Ranking berdasarkan pembaca unik dalam periode `daily`, `weekly`, atau `monthly` |
+
+Ranking trending menggunakan aktivitas pada `reading_history`, bukan angka popularitas katalog. Karena itu, hasil tiap periode bergantung pada data baca Mangatsu yang tercatat dan dapat sama jika aktivitas dalam rentang waktunya sama.
 
 ### 4.2 Search
 
@@ -147,13 +151,34 @@ Halaman detail menampilkan informasi katalog yang tersedia, misalnya judul, samp
 
 ### 4.4 Genre Exploration
 
-Frontend memiliki halaman eksplorasi dan penyaringan manga berdasarkan genre. Backend juga menyediakan endpoint untuk meminta manga berdasarkan nama tag MangaDex.
+Frontend memiliki halaman eksplorasi dan penyaringan manga berdasarkan genre. Angka pada daftar genre memakai total hasil MangaDex, bukan jumlah dari sampel manga unggulan. Genre dengan total nol tidak ditampilkan. Halaman genre menggunakan paginasi 25 manga per halaman.
 
 | Method | Endpoint | Keterangan |
 |---|---|---|
-| `GET` | `/api/manga/genre/{genre_name}?page=1` | Meminta daftar manga berdasarkan tag |
+| `GET` | `/api/manga/genre-counts?genres=Action%7CComedy` | Mengambil total manga untuk sejumlah genre |
+| `GET` | `/api/manga/genre/{genre_name}?page=1` | Meminta halaman manga berdasarkan tag; respons menyertakan `total` |
 
-### 4.5 Registration and Login
+### 4.5 Reading Progress and History
+
+Reader menyimpan halaman terakhir yang dibaca per chapter. Saat mencapai akhir chapter, chapter ditandai selesai; riwayat ini menjadi dasar fitur lanjut membaca, persentase progres per manga, dan ranking trending.
+
+| Method | Endpoint | Keterangan |
+|---|---|---|
+| `GET` | `/api/reading/progress/{manga_id}` | Mengambil progres, chapter terakhir, dan daftar ID chapter selesai untuk pengguna |
+| `POST` | `/api/reading/progress` | Menyimpan chapter dan posisi halaman baca |
+| `DELETE` | `/api/reading/progress/{manga_id}` | Menghapus progres serta riwayat baca manga |
+| `GET` | `/api/reading/summary` | Mengambil ringkasan progres baca pengguna |
+
+### 4.6 Reviews
+
+Halaman detail manga menyediakan ulasan dan rating yang tersimpan di MySQL. Pengguna dapat melihat ulasan manga dan mengirim ulasannya sendiri.
+
+| Method | Endpoint | Keterangan |
+|---|---|---|
+| `GET` | `/api/manga/{manga_id}/reviews` | Mengambil ulasan untuk manga |
+| `POST` | `/api/manga/{manga_id}/reviews` | Mengirim rating dan komentar |
+
+### 4.7 Registration and Login
 
 Pengguna dapat membuat akun dengan nama, email, dan password, kemudian masuk dengan email dan password.
 
@@ -172,7 +197,7 @@ Login mengembalikan informasi pengguna yang mencakup ID, nama, dan email. Fronte
 | `POST` | `/api/register` | `name`, `email`, `password` |
 | `POST` | `/api/login` | `email`, `password` |
 
-### 4.6 Personal Bookmark Library
+### 4.8 Personal Bookmark Library
 
 Pengguna yang sudah login dapat mengelola daftar manga pribadi:
 
@@ -192,7 +217,7 @@ Status baca yang diterima API:
 
 Relasi pengguna dan bookmark disimpan di MySQL. Satu pengguna tidak dapat mempunyai bookmark duplikat untuk manga yang sama karena ada unique key gabungan `user_id` dan `manga_id`.
 
-### 4.7 Profile and Account Deletion
+### 4.9 Profile and Account Deletion
 
 Halaman profil menyediakan logout dan alur konfirmasi penghapusan akun. Endpoint hapus akun meminta email dan password sebagai konfirmasi. Bookmark yang memiliki foreign key ke akun mengikuti aturan penghapusan cascade database.
 
@@ -209,7 +234,6 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 | Fitur | Status saat ini | Catatan |
 |---|---|---|
 | Reader chapter MangaDex | Tersedia untuk chapter yang tersedia | Mengambil halaman dari MangaDex; tidak menyimpan halaman |
-| Komentar dan review komunitas | Belum terhubung | Area UI detail belum tersambung ke API penyimpanan komentar |
 | Token autentikasi | Belum tersedia | Login belum menerbitkan token dan request bookmark menggunakan `user_id` |
 | Sinkronisasi rak buku lintas perangkat yang aman | Perlu penguatan | Memerlukan autentikasi server-side, misalnya session/token |
 | Pengaturan base URL per lingkungan | Perlu ditambahkan | URL API saat ini ditulis langsung pada kode frontend |
@@ -226,7 +250,8 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 - Backend REST API Flask.
 - Integrasi backend ke MangaDex API untuk katalog dan chapter.
 - Cache katalog sementara di memori backend.
-- MySQL untuk tabel akun dan bookmark.
+- MySQL untuk akun, bookmark, ulasan, progres chapter, dan riwayat baca.
+- Ranking trending berdasarkan aktivitas baca Mangatsu pada rentang harian, mingguan, dan bulanan.
 - Docker Compose untuk web, API, database, dan phpMyAdmin.
 - Penghapusan akun dengan verifikasi password.
 
@@ -234,7 +259,6 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 
 - Meng-host atau menyimpan salinan file manga/chapter.
 - Pembelian, pembayaran, atau langganan konten.
-- API komentar/review komunitas yang tersimpan.
 - Integrasi OAuth atau sistem token untuk autentikasi request API.
 - Sinkronisasi cache antar-replika backend.
 - Infrastruktur cloud atau deployment produksi yang diamankan.
@@ -254,7 +278,7 @@ Fitur pada bagian ini tidak boleh dianggap telah selesai atau tersimpan secara b
 
 ## 7. System Architecture
 
-Mangatsu menggunakan arsitektur client-server. Flutter Web berjalan di browser, Flask menyediakan API, MySQL menyimpan data akun dan bookmark, sedangkan MangaDex API menjadi sumber katalog dan chapter eksternal.
+Mangatsu menggunakan arsitektur client-server. Flutter Web berjalan di browser, Flask menyediakan API, MySQL menyimpan data akun, bookmark, ulasan, dan progres baca, sedangkan MangaDex API menjadi sumber katalog dan chapter eksternal.
 
 ### 7.1 Architecture Flow
 
@@ -376,7 +400,7 @@ flowchart TD
 
 | Teknologi | Pemakaian |
 |---|---|
-| MySQL 8 | Penyimpanan akun dan bookmark |
+| MySQL 8 | Penyimpanan akun, bookmark, ulasan, dan riwayat/progres baca |
 | Docker | Packaging service |
 | Docker Compose | Menjalankan dan menghubungkan seluruh service |
 | phpMyAdmin | Antarmuka administrasi MySQL untuk lingkungan lokal |
@@ -394,13 +418,16 @@ flowchart TD
 
 ## 9. Database Design
 
-Database utama bernama `perpustakaan`. Skema SQL proyek mendefinisikan tabel `users` dan `bookmarks`.
+Database utama bernama `perpustakaan`. Skema SQL proyek mendefinisikan tabel `users`, `bookmarks`, `reviews`, `reading_progress`, dan `reading_history`.
 
 ### 9.1 Entity Relationship
 
 ```mermaid
 erDiagram
     USERS ||--o{ BOOKMARKS : memiliki
+    USERS ||--o{ REVIEWS : menulis
+    USERS ||--o{ READING_PROGRESS : memiliki
+    USERS ||--o{ READING_HISTORY : membaca
 
     USERS {
         int id PK
@@ -418,7 +445,36 @@ erDiagram
         varchar read_status
         timestamp created_at
     }
+
+    REVIEWS {
+        int id PK
+        int user_id FK
+        char(36) manga_id
+        tinyint rating
+        text comment
+        timestamp created_at
+    }
+
+    READING_PROGRESS {
+        int user_id PK, FK
+        char(36) manga_id PK
+        varchar last_chapter_id
+        timestamp last_read_at
+        tinyint progress_percent
+    }
+
+    READING_HISTORY {
+        int id PK
+        int user_id FK
+        char(36) manga_id
+        char(36) chapter_id
+        smallint current_page
+        smallint total_pages
+        timestamp last_read_at
+    }
 ```
+
+`reading_history` mencatat aktivitas chapter per pengguna. Data ini dipakai untuk progres/penyelesaian chapter dan agregasi pembaca unik pada endpoint Trending. Daftar trending merupakan agregasi langsung dari database untuk periode yang diminta, bukan cache popularitas MangaDex.
 
 ### 9.2 `users`
 
@@ -447,9 +503,10 @@ erDiagram
 |---|---|
 | Primary key pada `users.id` dan `bookmarks.id` | Identitas unik setiap record |
 | Unique key pada `users.email` | Mencegah email akun ganda |
-| Unique key gabungan `(user_id, manga_id)` | Mencegah pengguna menyimpan UUID MangaDex yang sama lebih dari sekali |
-| Foreign key `bookmarks.user_id → users.id` | Menjaga relasi bookmark dengan pemilik |
-| `ON DELETE CASCADE` | Menghapus bookmark ketika akun pemilik dihapus |
+| Unique key pada bookmark dan primary key `(user_id, manga_id)` pada progres | Mencegah bookmark ganda dan menyediakan satu ringkasan progres per manga |
+| Unique key gabungan `(user_id, manga_id, chapter_id)` pada riwayat | Satu progres tersimpan untuk setiap chapter per pengguna dan manga |
+| Foreign key dari `bookmarks`, `reviews`, `reading_progress`, dan `reading_history` ke `users.id` | Menjaga relasi data dengan pemilik |
+| `ON DELETE CASCADE` pada relasi pengguna | Menghapus data terkait ketika akun dihapus |
 
 ### 9.5 Data Persistence and Cache
 
@@ -483,11 +540,19 @@ Content-Type: application/json
 | `GET` | `/api` | — | Health check API |
 | `GET` | `/api/health` | — | Health check API |
 | `GET` | `/api/manga` | `page` | Daftar manga |
+| `GET` | `/api/manga/trending` | `period`: `daily`, `weekly`, atau `monthly` | Ranking berdasarkan pembaca unik dalam 1, 7, atau 30 hari terakhir |
 | `GET` | `/api/manga/search` | `q`, `page` | Pencarian manga |
 | `GET` | `/api/manga/{manga_id}` | Path: UUID MangaDex | Detail manga |
-| `GET` | `/api/manga/genre/{genre_name}` | Path: nama tag; query: `page` | Daftar manga berdasarkan tag |
+| `GET` | `/api/manga/genre-counts` | Query: `genres`, dipisahkan `\|` | Total hasil MangaDex per genre |
+| `GET` | `/api/manga/genre/{genre_name}` | Path: nama tag; query: `page` | Daftar manga berdasarkan tag; respons menyertakan `total` |
 | `GET` | `/api/manga/{manga_id}/chapters` | Path: UUID manga; query: `page`, `language` (`id`/`en`) | Daftar chapter |
 | `GET` | `/api/chapter/{chapter_id}/pages` | Path: UUID chapter | URL gambar halaman chapter |
+| `GET` | `/api/manga/{manga_id}/reviews` | Path: UUID manga | Daftar ulasan |
+| `POST` | `/api/manga/{manga_id}/reviews` | Path dan body JSON | Membuat ulasan |
+| `GET` | `/api/reading/progress/{manga_id}` | Path: UUID manga | Progres, chapter terakhir, dan chapter selesai |
+| `POST` | `/api/reading/progress` | Body JSON | Menyimpan posisi baca |
+| `DELETE` | `/api/reading/progress/{manga_id}` | Path: UUID manga | Menghapus progres serta riwayat manga |
+| `GET` | `/api/reading/summary` | Query `user_id` sesuai implementasi login | Ringkasan baca pengguna |
 
 Chapter berbahasa Indonesia diminta bersama chapter berbahasa Inggris sebagai fallback. Endpoint chapter mengembalikan maksimal 100 chapter per halaman; endpoint halaman mengembalikan URL gambar MangaDex.
 
@@ -710,9 +775,10 @@ Rencana berikut memetakan area yang perlu diuji. Jalankan tes yang tersedia di r
 | Area | Skenario utama | Kriteria lulus |
 |---|---|---|
 | Home/catalog | Buka beranda dan muat katalog | Manga tampil atau error dapat dipahami dan dapat dicoba ulang |
+| Trending | Pilih Harian, Mingguan, dan Bulanan | Request memakai periode 1, 7, dan 30 hari; ranking dihitung dari aktivitas baca pada periode masing-masing |
 | Search | Cari kata kunci valid dan kosong | Hasil sesuai query; query kosong tidak merusak halaman |
 | Detail | Buka detail manga | Informasi tersedia ditampilkan; kegagalan upstream ditangani |
-| Genre | Buka halaman eksplorasi dan filter genre | Hasil dapat ditampilkan tanpa crash |
+| Genre | Buka halaman eksplorasi dan filter genre | Jumlah sesuai total API, genre nol disembunyikan, dan hasil dapat dipaginasi |
 | Registration | Nama/email/password valid | Akun tercipta dan password disimpan sebagai hash |
 | Registration | Email duplikat atau input tidak valid | API mengembalikan error yang sesuai |
 | Login | Kredensial valid/tidak valid | Login berhasil atau ditolak dengan status yang sesuai |
@@ -725,18 +791,21 @@ Uji endpoint melalui Postman atau alat HTTP:
 
 1. Periksa `GET /api/health`.
 2. Periksa katalog, pencarian, detail, genre, chapter, dan halaman baca saat MangaDex dapat dijangkau.
-3. Uji registrasi dengan input valid, invalid, dan email duplikat.
-4. Uji login dengan password benar dan salah.
-5. Uji operasi bookmark dengan `user_id` valid dan tidak valid.
-6. Pastikan `read_status` di luar `plan`, `reading`, atau `completed` ditolak.
-7. Uji delete account dengan password benar, salah, dan body kosong.
+3. Periksa total genre serta pastikan genre dengan total nol tidak ditampilkan.
+4. Panggil `GET /api/manga/trending` dengan `period=daily`, `weekly`, dan `monthly`; pastikan rentang masing-masing satu, tujuh, dan 30 hari.
+5. Uji registrasi dengan input valid, invalid, dan email duplikat.
+6. Uji login dengan password benar dan salah.
+7. Uji operasi bookmark dengan `user_id` valid dan tidak valid.
+8. Pastikan `read_status` di luar `plan`, `reading`, atau `completed` ditolak.
+9. Uji delete account dengan password benar, salah, dan body kosong.
 
 ### 13.3 Database Testing
 
-- Pastikan tabel `users` dan `bookmarks` dibuat.
-- Pastikan email dan pasangan `(user_id, manga_id)` unik.
-- Pastikan foreign key bookmark mengarah ke pengguna.
-- Pastikan penghapusan user membersihkan bookmark terkait sesuai cascade.
+- Pastikan tabel `users`, `bookmarks`, `reviews`, `reading_progress`, dan `reading_history` dibuat.
+- Pastikan email unik, bookmark tidak duplikat per pasangan `(user_id, manga_id)`, dan progres memiliki satu baris per manga/pengguna.
+- Pastikan foreign key pada tabel pengguna mengarah ke `users.id`.
+- Pastikan penghapusan user membersihkan data terkait sesuai cascade.
+- Pastikan aktivitas baca masuk ke agregasi Trending untuk rentang 1, 7, atau 30 hari.
 - Pastikan data tetap ada setelah container dihentikan dan dinyalakan kembali tanpa `-v`.
 
 ### 13.4 Integration and Container Testing
@@ -784,4 +853,4 @@ flowchart LR
     Q -->|Lulus| M[Dokumentasi dan merge]
 ```
 
-Pembagian ini bersifat fleksibel: anggota tim dapat membantu area lain saat diperlukan. Perubahan lintas frontend, backend, dan database sebaiknya menyepakati format request/response terlebih dahulu agar integrasi konsisten.
+Pembagian ini bersifat fleksibel: anggota tim dapat membantu area lain saat diperlukan. Setiap perubahan lintas frontend, backend, dan database harus menyepakati format request/response dan memperbarui kontrak API di README ini agar dokumentasi dan integrasi tetap konsisten.
