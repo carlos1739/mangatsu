@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:project_manga/models/manga.dart';
 import 'package:project_manga/services/api_service.dart';
+import 'package:project_manga/services/favorite_service.dart';
 import 'package:project_manga/widgets/anime_card.dart';
 import 'package:project_manga/services/appearance_controller.dart';
 import 'package:project_manga/screens/catalog/chapter_reader.dart';
@@ -30,6 +31,10 @@ class _MangaDetailState extends State<MangaDetail> {
   bool _showFullSynopsis = false;
   bool _bookmarked = false;
   bool _bookmarkLoading = false;
+
+  // [FAVORIT] state
+  bool _isFavorite = false;
+  bool _favoriteLoading = false;
 
   List<Map<String, dynamic>> _reviews = [];
   bool _reviewsLoading = true;
@@ -72,6 +77,7 @@ class _MangaDetailState extends State<MangaDetail> {
     _bookmarked = _currentManga.bookmark;
     _rebuildChapters();
     _checkBookmark();
+    _checkFavorite(); // [FAVORIT]
     _loadMangaDetail();
     _loadMangaChapters();
     _loadReviews();
@@ -153,6 +159,40 @@ class _MangaDetailState extends State<MangaDetail> {
     }
   }
   // [AKHIR]
+
+  // ==================== [FAVORIT] ====================
+
+  Future<void> _checkFavorite() async {
+    final result = await FavoriteService.isFavorite(widget.manga.id);
+    if (!mounted) return;
+    setState(() => _isFavorite = result);
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_favoriteLoading) return;
+    setState(() => _favoriteLoading = true);
+    try {
+      if (_isFavorite) {
+        await FavoriteService.removeFavorite(widget.manga.id);
+      } else {
+        await FavoriteService.addFavorite(_currentManga);
+      }
+      if (!mounted) return;
+      setState(() => _isFavorite = !_isFavorite);
+      _showMessage(
+        _isFavorite
+            ? 'Manga ditambahkan ke Favorit'
+            : 'Manga dihapus dari Favorit',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('Gagal memperbarui Favorit: $error');
+    } finally {
+      if (mounted) setState(() => _favoriteLoading = false);
+    }
+  }
+
+  // ==================== [AKHIR FAVORIT] ====================
 
   // Review
   Future<void> _loadReviews() async {
@@ -563,6 +603,34 @@ class _MangaDetailState extends State<MangaDetail> {
             label: Text(_bookmarked ? 'Tersimpan' : 'Bookmark'),
           ),
         ),
+        // [FAVORIT] tombol favorit, di bawah Bookmark
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _favoriteLoading ? null : _toggleFavorite,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _isFavorite ? Colors.redAccent : null,
+              side: BorderSide(
+                color: _isFavorite ? Colors.redAccent : Colors.grey,
+              ),
+            ),
+            icon:
+                _favoriteLoading
+                    ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : Icon(
+                      _isFavorite ? Icons.favorite : Icons.favorite_border,
+                    ),
+            label: Text(
+              _isFavorite ? 'Favorit Tersimpan' : 'Tambah Favorit',
+            ),
+          ),
+        ),
+        // [AKHIR FAVORIT]
         // [BARU] dropdown status baca, hanya muncul jika sudah di-bookmark
         if (_bookmarked) ...[
           const SizedBox(height: 8),
@@ -1194,7 +1262,7 @@ class _MangaDetailState extends State<MangaDetail> {
     _chapterSearch.removeListener(_onChapterSearchChanged);
     _chapterSearch.dispose();
     _chapterScrollController.dispose();
-    
+
     //============================== PENAMBAHAN KODE STATUS BACA ==========================
     _reviewController.dispose();
     //============================== ENDING PENAMBAHAN KODE STATUS BACA ========================== 
