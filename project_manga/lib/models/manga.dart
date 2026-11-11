@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 class Manga {
   final String id;
   final String title;
@@ -94,7 +96,21 @@ class Manga {
     );
   }
 
-  String get cardImageUrl => linkGambar;
+  String get cardImageUrl {
+    final cover = Uri.tryParse(linkGambar);
+    final segments = cover?.pathSegments;
+    if (cover?.host != 'uploads.mangadex.org' ||
+        segments == null ||
+        segments.length != 3 ||
+        segments.first != 'covers') {
+      return linkGambar;
+    }
+
+    final proxyPath = '/api/cover/${segments[1]}/${segments[2]}';
+    return kIsWeb
+        ? Uri.base.resolve(proxyPath).toString()
+        : Uri.parse('http://127.0.0.1:5000$proxyPath').toString();
+  }
 }
 
 class MangaChapter {
