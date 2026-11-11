@@ -748,7 +748,7 @@ class _MangaDetailState extends State<MangaDetail> {
               child: Opacity(
                 opacity: .12,
                 child: Image.network(
-                  manga.linkGambar,
+                  manga.cardImageUrl,
                   fit: BoxFit.cover,
                   filterQuality: FilterQuality.low,
                   cacheWidth: 960,
@@ -806,7 +806,7 @@ class _MangaDetailState extends State<MangaDetail> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Image.network(
-            _currentManga.linkGambar,
+            _currentManga.cardImageUrl,
             fit: BoxFit.cover,
             filterQuality: FilterQuality.low,
             cacheWidth: 420,
