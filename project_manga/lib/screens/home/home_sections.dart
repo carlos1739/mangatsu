@@ -247,7 +247,7 @@ mixin HomeSections on _HomeStateBase {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeading('Update Terbaru', 'Manga pilihan yang baru diperbarui'),
+        _sectionHeading('Update Terbaru v2', 'Manga pilihan yang baru diperbarui'),
         const SizedBox(height: 14),
         if (updates.isEmpty)
           Text('Belum ada update manga.', style: TextStyle(color: _textColor))

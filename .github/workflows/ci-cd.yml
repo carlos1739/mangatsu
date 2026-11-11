@@ -21,6 +21,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Build Flutter web
         working-directory: project_manga
@@ -42,6 +43,8 @@ jobs:
         with:
           context: ./backend_manga
           push: true
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
           tags: |
             carlossiregar/mangatsu-api:sha-${{ github.sha }}
             ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-api:latest' || '' }}
@@ -52,6 +55,8 @@ jobs:
         with:
           context: ./project_manga
           push: true
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
           tags: |
             carlossiregar/mangatsu-web:sha-${{ github.sha }}
             ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-web:latest' || '' }}

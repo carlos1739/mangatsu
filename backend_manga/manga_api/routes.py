@@ -1,9 +1,11 @@
 import uuid
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from urllib.parse import quote
 
-from flask import Blueprint, jsonify, request
+import requests
+from flask import Blueprint, Response, jsonify, request
 
 from database.db import execute_query, execute_write
 
@@ -869,3 +871,54 @@ def add_manga_review(manga_id):
 @api.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'API running'}), 200
+
+
+@api.route('/api/cover/<uuid:manga_id>/<filename>', methods=['GET'])
+def get_manga_cover(manga_id, filename):
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,180}\.[A-Za-z0-9]{2,5}', filename):
+        return jsonify({'status': 'error', 'message': 'Nama file cover tidak valid'}), 400
+
+    url = (
+        f'https://uploads.mangadex.org/covers/{manga_id}/'
+        f'{quote(filename, safe="")}'
+    )
+    try:
+        upstream = requests.get(
+            url,
+            headers={
+                'User-Agent': 'Mangatsu/1.0',
+                'Referer': 'https://mangadex.org/',
+            },
+            timeout=(5, 20),
+            stream=True,
+        )
+    except requests.exceptions.Timeout:
+        return jsonify({'status': 'error', 'message': 'Pengambilan cover timeout'}), 504
+    except requests.exceptions.RequestException:
+        return jsonify({'status': 'error', 'message': 'Cover tidak dapat diambil dari MangaDex'}), 502
+
+    try:
+        if upstream.status_code == 404:
+            return jsonify({'status': 'error', 'message': 'Cover tidak ditemukan'}), 404
+        if upstream.status_code != 200:
+            return jsonify({'status': 'error', 'message': f'MangaDex menolak cover ({upstream.status_code})'}), 502
+
+        content_type = upstream.headers.get('Content-Type', '').split(';', 1)[0].lower()
+        if not content_type.startswith('image/') or content_type == 'image/svg+xml':
+            return jsonify({'status': 'error', 'message': 'Respons MangaDex bukan gambar yang valid'}), 502
+
+        chunks = []
+        size = 0
+        for chunk in upstream.iter_content(chunk_size=64 * 1024):
+            size += len(chunk)
+            if size > 10 * 1024 * 1024:
+                return jsonify({'status': 'error', 'message': 'Ukuran cover melebihi batas'}), 502
+            chunks.append(chunk)
+
+        return Response(
+            b''.join(chunks),
+            mimetype=content_type,
+            headers={'Cache-Control': 'public, max-age=86400'},
+        )
+    finally:
+        upstream.close()
