@@ -47,8 +47,8 @@ jobs:
           cache-to: type=gha,scope=api,mode=max
           tags: |
             carlossiregar/mangatsu-api:sha-${{ github.sha }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-api:latest' || '' }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-api:1.1' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-api:latest' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-api:1.1' || '' }}
 
       - name: Build and push web image
         uses: docker/build-push-action@v6
@@ -59,11 +59,11 @@ jobs:
           cache-to: type=gha,scope=web,mode=max
           tags: |
             carlossiregar/mangatsu-web:sha-${{ github.sha }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-web:latest' || '' }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-web:1.1' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-web:latest' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-web:1.1' || '' }}
 
   deploy-to-kubernetes:
-    if: github.ref == 'refs/heads/main' && vars.K8S_DEPLOY_ENABLED == 'true'
+    if: github.ref == 'refs/heads/master' && vars.K8S_DEPLOY_ENABLED == 'true'
     needs: build-and-push
     runs-on: [self-hosted, windows, mangatsu-kubernetes]
     env:

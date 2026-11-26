@@ -90,13 +90,13 @@ kubectl rollout status deployment/api -n mangatsu
 kubectl rollout status deployment/web -n mangatsu
 ```
 
-GitHub Actions builds and pushes commit-specific images on GitHub-hosted runners. On `main`, it can also deploy to this local cluster using a self-hosted Windows runner. The workflow renders the API and web manifests with the exact commit image tags before applying them, so it does not first roll out stale `1.1` images:
+GitHub Actions builds and pushes commit-specific images on GitHub-hosted runners. On the repository's default `master` branch, it can also deploy to this local cluster using a self-hosted Windows runner. The workflow renders the API and web manifests with the exact commit image tags before applying them, so it does not first roll out stale `1.1` images:
 
 1. In **Settings > Actions > Runners**, choose **New self-hosted runner**, select Windows x64, and follow GitHub's setup commands on this PC. Add the custom label `mangatsu-kubernetes`; do not share the temporary registration token.
 2. Run the runner under the same Windows account whose `kubectl config current-context` is `docker-desktop`. Keep Docker Desktop Kubernetes and the runner online.
 3. In **Settings > Secrets and variables > Actions > Variables**, add `K8S_DEPLOY_ENABLED=true`.
 4. In the **Secrets** tab, add `MYSQL_ROOT_PASSWORD`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD`. `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are also required by the image build job.
-5. Push a trusted change to `main`. The deploy job applies the manifests, updates API/web to the commit-specific images, and waits for both rollouts.
+5. Merge a trusted change to `master`. The deploy job applies the manifests, updates API/web to the commit-specific images, and waits for both rollouts.
 
 The runner uses its local Kubernetes credentials; do not store a kubeconfig or database Secret in GitHub or the repository. Restrict write access and never run untrusted pull-request workflows on this self-hosted runner. Since the cluster and runner are on the same PC, this supports a CI/CD demonstration but is not a hosted 24-hour service.
 
