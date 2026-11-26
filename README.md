@@ -757,6 +757,12 @@ flutter run -d chrome
 
 Frontend lokal menggunakan base URL API yang didefinisikan di kode Flutter. Perangkat Android emulator memiliki aturan alamat host yang berbeda dari browser desktop; samakan konfigurasi URL dengan target yang digunakan.
 
+### 11.5 Kubernetes and OpenShift Deployment
+
+Manifest Kubernetes untuk web, API, MySQL dengan persistent volume, HPA, dan monitoring Uptime Kuma tersedia di [`k8s/`](./k8s/). Untuk OpenShift, Route frontend dan langkah deploy ada di [`openshift/`](./openshift/). Kedua target menggunakan manifest aplikasi yang sama; web/API dijalankan non-root.
+
+Workflow GitHub Actions membangun dan mengirim image ke Docker Hub, lalu dapat deploy ke Kubernetes lokal melalui self-hosted runner Windows dengan context `docker-desktop`. Detail registrasi runner dan konfigurasi variable/secrets ada di [`k8s/README.md`](./k8s/README.md). Runner hanya deploy dari branch `main`; Docker Desktop dan komputer harus menyala saat pipeline berjalan. OpenShift course lab tetap menjadi opsi demonstrasi manual jika tersedia.
+
 ---
 
 ## 12. Environment Configuration
