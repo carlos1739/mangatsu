@@ -1,4 +1,4 @@
-name: Build and Push Docker Images
+name: Build, Push, and Deploy to Kubernetes
 
 on:
   push:
@@ -47,8 +47,8 @@ jobs:
           cache-to: type=gha,scope=api,mode=max
           tags: |
             carlossiregar/mangatsu-api:sha-${{ github.sha }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-api:latest' || '' }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-api:1.1' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-api:latest' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-api:1.1' || '' }}
 
       - name: Build and push web image
         uses: docker/build-push-action@v6
@@ -59,5 +59,127 @@ jobs:
           cache-to: type=gha,scope=web,mode=max
           tags: |
             carlossiregar/mangatsu-web:sha-${{ github.sha }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-web:latest' || '' }}
-            ${{ github.ref == 'refs/heads/main' && 'carlossiregar/mangatsu-web:1.1' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-web:latest' || '' }}
+            ${{ github.ref == 'refs/heads/master' && 'carlossiregar/mangatsu-web:1.1' || '' }}
+
+  deploy-to-kubernetes:
+    if: github.ref == 'refs/heads/master' && vars.K8S_DEPLOY_ENABLED == 'true'
+    needs: build-and-push
+    runs-on: [self-hosted, windows, mangatsu-kubernetes]
+    env:
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify local Kubernetes context
+        shell: pwsh
+        run: |
+          $context = kubectl config current-context
+          if ($LASTEXITCODE -ne 0 -or $context -ne "docker-desktop") {
+            throw "The runner must use the docker-desktop Kubernetes context."
+          }
+          $null = kubectl get nodes
+          if ($LASTEXITCODE -ne 0) {
+            throw "The self-hosted runner cannot access the Kubernetes cluster."
+          }
+
+      - name: Create namespace and database credentials
+        shell: pwsh
+        run: |
+          $required = @("MYSQL_ROOT_PASSWORD", "DB_NAME", "DB_USER", "DB_PASSWORD")
+          foreach ($name in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name repository secret is required."
+            }
+          }
+
+          $secretFile = Join-Path $env:RUNNER_TEMP "mangatsu-db.env"
+          try {
+            $secretValues = @(
+              "MYSQL_ROOT_PASSWORD=$env:MYSQL_ROOT_PASSWORD",
+              "DB_NAME=$env:DB_NAME",
+              "DB_USER=$env:DB_USER",
+              "DB_PASSWORD=$env:DB_PASSWORD"
+            )
+            $utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
+            [System.IO.File]::WriteAllLines($secretFile, $secretValues, $utf8NoBom)
+            kubectl apply -f k8s/00-namespace.yaml
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the namespace." }
+            $secretYaml = kubectl create secret generic mangatsu-db `
+              --namespace mangatsu `
+              --from-env-file="$secretFile" `
+              --dry-run=client -o yaml
+            if ($LASTEXITCODE -ne 0) { throw "Could not generate database Secret." }
+            $secretYaml | kubectl apply -f -
+            if ($LASTEXITCODE -ne 0) { throw "Could not apply database Secret." }
+          } finally {
+            Remove-Item -Force $secretFile -ErrorAction SilentlyContinue
+          }
+
+          $configMapYaml = kubectl create configmap mangatsu-db-init `
+            --namespace mangatsu `
+            --from-file=init.sql=backend_manga/perpustakaan.sql `
+            --dry-run=client -o yaml
+          if ($LASTEXITCODE -ne 0) { throw "Could not generate database initialization ConfigMap." }
+          $configMapYaml | kubectl apply -f -
+          if ($LASTEXITCODE -ne 0) { throw "Could not apply database initialization ConfigMap." }
+
+      - name: Apply Kubernetes resources
+        shell: pwsh
+        run: |
+          $manifests = @(
+            "k8s/01-config.yaml",
+            "k8s/02-mysql.yaml",
+            "k8s/05-hpa.yaml",
+            "k8s/06-pdb.yaml",
+            "k8s/08-monitoring.yaml"
+          )
+          foreach ($manifest in $manifests) {
+            kubectl apply --namespace mangatsu --filename $manifest
+            if ($LASTEXITCODE -ne 0) { throw "Could not apply $manifest." }
+          }
+
+          $utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
+          $images = @(
+            @{
+              Manifest = "k8s/03-api.yaml"
+              OldImage = "carlossiregar/mangatsu-api:1.1"
+              NewImage = "carlossiregar/mangatsu-api:sha-$env:GITHUB_SHA"
+            },
+            @{
+              Manifest = "k8s/04-web.yaml"
+              OldImage = "carlossiregar/mangatsu-web:1.1"
+              NewImage = "carlossiregar/mangatsu-web:sha-$env:GITHUB_SHA"
+            }
+          )
+          foreach ($image in $images) {
+            $manifestContent = [System.IO.File]::ReadAllText($image.Manifest)
+            if (-not $manifestContent.Contains($image.OldImage)) {
+              throw "Expected image reference not found in $($image.Manifest)."
+            }
+            $manifestContent = $manifestContent.Replace($image.OldImage, $image.NewImage)
+            $temporaryManifest = Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($image.Manifest))
+            try {
+              [System.IO.File]::WriteAllText($temporaryManifest, $manifestContent, $utf8NoBom)
+              kubectl apply --namespace mangatsu --filename $temporaryManifest
+              if ($LASTEXITCODE -ne 0) { throw "Could not apply $($image.Manifest) with the commit image." }
+            } finally {
+              Remove-Item -Force $temporaryManifest -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Wait for Kubernetes rollouts
+        shell: pwsh
+        run: |
+          kubectl rollout status statefulset/db -n mangatsu --timeout=180s
+          if ($LASTEXITCODE -ne 0) { throw "Database rollout failed." }
+          kubectl rollout status deployment/api -n mangatsu --timeout=180s
+          if ($LASTEXITCODE -ne 0) { throw "API rollout failed." }
+          kubectl rollout status deployment/web -n mangatsu --timeout=180s
+          if ($LASTEXITCODE -ne 0) { throw "Web rollout failed." }
+          kubectl get pods,hpa -n mangatsu
